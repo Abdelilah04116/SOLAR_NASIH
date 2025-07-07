@@ -269,32 +269,36 @@ subsidies = assistant.get_available_subsidies(
 )
 ```
 
-##  Métriques et Monitoring
+## Métriques et Monitoring
 
 ```mermaid
-dashboard
-    title Tableau de Bord SOLAR NASIH
-    
-    card "Utilisateurs Actifs" value 1,234
-    card "Questions Traitées" value 15,678
-    card "Calculs Réalisés" value 2,345
-    card "Taux de Satisfaction" value 94.5%
-    
-    chart "Utilisation par Langue" {
-        "Français": 45
-        "Arabe": 30
-        "Anglais": 15
-        "Darija": 8
-        "Amazigh": 2
-    }
-    
-    chart "Types de Requêtes" {
-        "Calculs": 35
-        "Réglementaire": 25
-        "Technique": 20
-        "Commercial": 15
-        "Formation": 5
-    }
+graph TD
+    subgraph Métriques["Tableau de Bord SOLAR NASIH"]
+        A["Utilisateurs Actifs<br/>1,234"]
+        B["Questions Traitées<br/>15,678"]
+        C["Calculs Réalisés<br/>2,345"] 
+        D["Taux de Satisfaction<br/>94.5%"]
+    end
+
+    subgraph Langues["Utilisation par Langue"]
+        E["Français (45%)"]
+        F["Arabe (30%)"]
+        G["Anglais (15%)"]
+        H["Darija (8%)"]
+        I["Amazigh (2%)"]
+    end
+
+    subgraph Requêtes["Types de Requêtes"]
+        J["Calculs (35%)"]
+        K["Réglementaire (25%)"]
+        L["Technique (20%)"]
+        M["Commercial (15%)"]
+        N["Formation (5%)"]
+    end
+
+    style Métriques fill:#f0f0f0,stroke:#333
+    style Langues fill:#e1f5fe,stroke:#333
+    style Requêtes fill:#e8f5e9,stroke:#333
 ```
 
 ##  Tests et Validation
