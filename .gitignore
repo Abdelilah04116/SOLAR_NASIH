@@ -24,4 +24,5 @@ __pycache__/
 *.tmp
 logs/
 temp/
+web_vector_store/
 vector_store/

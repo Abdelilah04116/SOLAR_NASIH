@@ -72,25 +72,72 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Cache pour les modèles et la pipeline
+@st.cache_resource
+def create_cached_pipeline(vector_store_type: str, store_path: str, 
+                          text_model_name: str, image_model_name: str,
+                          device: str = "cpu", batch_size: int = 16):
+    """Crée et cache la pipeline pour éviter les rechargements"""
+    try:
+        config = RAGPipelineConfig()
+        config.vector_store.store_type = vector_store_type
+        config.vector_store.store_path = store_path
+        config.embedding.text_model_name = text_model_name
+        config.embedding.image_model_name = image_model_name
+        config.embedding.device = device
+        config.embedding.batch_size = batch_size
+        config.log_level = "INFO"
+        
+        pipeline = create_pipeline(config)
+        return pipeline, None
+        
+    except Exception as e:
+        return None, str(e)
+
 class RAGWebInterface:
     """Interface web principale"""
     
     def __init__(self):
-        self.pipeline = None
-        self.visualizer = ChunkVisualizer()
-        
-        # Initialisation de la session
+        # Initialisation de la session sans pipeline automatique
         if 'pipeline_initialized' not in st.session_state:
             st.session_state.pipeline_initialized = False
         if 'documents' not in st.session_state:
             st.session_state.documents = []
         if 'search_history' not in st.session_state:
             st.session_state.search_history = []
+        if 'pipeline_config' not in st.session_state:
+            st.session_state.pipeline_config = None
+            
+        self.pipeline = None
+        self.visualizer = ChunkVisualizer()
+    
+    def get_pipeline(self):
+        """Récupère la pipeline depuis le cache"""
+        if st.session_state.pipeline_initialized and st.session_state.pipeline_config:
+            config = st.session_state.pipeline_config
+            pipeline, error = create_cached_pipeline(
+                config['vector_store_type'],
+                config['store_path'],
+                config['text_model_name'],
+                config['image_model_name'],
+                config['device'],
+                config['batch_size']
+            )
+            if pipeline:
+                self.pipeline = pipeline
+                return True
+            else:
+                st.error(f"Erreur pipeline: {error}")
+                return False
+        return False
     
     def run(self):
         """Lance l'interface web"""
         st.title("🔍 RAG Multimodal - Visualiseur de Chunks")
         st.markdown("---")
+        
+        # Récupérer la pipeline depuis le cache
+        pipeline_ready = self.get_pipeline()
         
         # Sidebar pour la configuration
         self.setup_sidebar()
@@ -121,13 +168,28 @@ class RAGWebInterface:
         st.sidebar.title("🛠️ Configuration")
         
         # Statut de la pipeline
-        if st.session_state.pipeline_initialized:
-            st.sidebar.success("✅ Pipeline initialisée")
+        if st.session_state.pipeline_initialized and self.get_pipeline():
+            st.sidebar.success("✅ Pipeline initialisée (cachée)")
             
-            if st.sidebar.button("🔄 Réinitialiser Pipeline"):
-                st.session_state.pipeline_initialized = False
-                self.pipeline = None
-                st.experimental_rerun()
+            # Informations sur le cache
+            if st.session_state.pipeline_config:
+                config = st.session_state.pipeline_config
+                st.sidebar.caption(f"📝 Modèle: {config['text_model_name'].split('/')[-1]}")
+                st.sidebar.caption(f"💾 Store: {config['vector_store_type']}")
+            
+            col1, col2 = st.sidebar.columns(2)
+            with col1:
+                if st.button("🔄 Reset"):
+                    st.session_state.pipeline_initialized = False
+                    st.session_state.pipeline_config = None
+                    self.pipeline = None
+                    st.rerun()
+            with col2:
+                if st.button("🧹 Clear Cache"):
+                    st.cache_resource.clear()
+                    st.session_state.pipeline_initialized = False
+                    st.session_state.pipeline_config = None
+                    st.rerun()
         else:
             st.sidebar.warning("⚠️ Pipeline non initialisée")
         
@@ -145,39 +207,290 @@ class RAGWebInterface:
             value="./web_vector_store"
         )
         
-        if st.sidebar.button("🚀 Initialiser Pipeline"):
-            self.initialize_pipeline(vector_store_type, store_path)
+        # Options avancées pour gérer les problèmes réseau
+        with st.sidebar.expander("⚙️ Options Avancées"):
+            use_lightweight_models = st.checkbox(
+                "Utiliser modèles légers", 
+                value=True, 
+                help="Modèles plus rapides à télécharger et charger"
+            )
+            
+            force_cpu = st.checkbox(
+                "Forcer CPU", 
+                value=True, 
+                help="Évite les problèmes GPU"
+            )
+            
+            offline_mode = st.checkbox(
+                "Mode offline", 
+                value=False, 
+                help="Utilise les modèles déjà téléchargés"
+            )
+        
+        # Boutons d'initialisation
+        col1, col2 = st.sidebar.columns(2)
+        
+        with col1:
+            if st.button("🚀 Initialiser", type="primary"):
+                self.initialize_pipeline(
+                    vector_store_type, 
+                    store_path,
+                    use_lightweight_models,
+                    force_cpu,
+                    offline_mode
+                )
+        
+        with col2:
+            if st.button("🔧 Mode Sécurisé"):
+                self.initialize_pipeline_safe_mode(vector_store_type, store_path)
         
         # Informations système
-        if self.pipeline:
+        if self.pipeline is not None:
             st.sidebar.subheader("📊 Informations")
-            stats = self.pipeline.get_statistics()
+            try:
+                stats = self.pipeline.get_statistics()
+                
+                st.sidebar.metric("Documents", stats['pipeline_state']['documents_processed'])
+                st.sidebar.metric("Chunks", stats['pipeline_state']['total_chunks'])
+                st.sidebar.metric("Vector Store", stats['vector_store_count'])
+            except Exception as e:
+                st.sidebar.error(f"Erreur stats: {e}")
+        
+        # Section d'aide
+        st.sidebar.subheader("📖 Aide")
+        st.sidebar.info("""
+        **Étapes :**
+        1. Initialiser la pipeline (1 fois)
+        2. Ingérer des documents  
+        3. Effectuer des recherches
+        4. Visualiser les résultats
+        
+        **💡 Les modèles sont mis en cache !**
+        Pas de rechargement à chaque interaction.
+        """)
+        
+        # Performance tips
+        with st.sidebar.expander("🚀 Tips Performance"):
+            st.markdown("""
+            **Optimisations activées :**
+            - ✅ Cache Streamlit pour les modèles
+            - ✅ Réutilisation des embeddings
+            - ✅ Batch processing
             
-            st.sidebar.metric("Documents", stats['pipeline_state']['documents_processed'])
-            st.sidebar.metric("Chunks", stats['pipeline_state']['total_chunks'])
-            st.sidebar.metric("Vector Store", stats['vector_store_count'])
+            **Pour de meilleures performances :**
+            - Utilisez "Modèles légers"
+            - Gardez la pipeline initialisée
+            - Évitez "Clear Cache" sauf problème
+            """)
+        
+        # Bouton de nettoyage
+        if self.pipeline is not None:
+            st.sidebar.subheader("🧹 Maintenance")
+            if st.sidebar.button("🗑️ Vider Vector Store", type="secondary"):
+                if st.sidebar.button("⚠️ Confirmer suppression"):
+                    try:
+                        self.pipeline.clear_vector_store()
+                        st.sidebar.success("Vector store vidé")
+                        st.rerun()
+                    except Exception as e:
+                        st.sidebar.error(f"Erreur: {e}")
     
-    def initialize_pipeline(self, vector_store_type: str, store_path: str):
-        """Initialise la pipeline"""
+    def initialize_pipeline_safe_mode(self, vector_store_type: str, store_path: str):
+        """Initialise la pipeline en mode sécurisé (sans modèles lourds)"""
+        
+        main_placeholder = st.empty()
+        
         try:
-            config = RAGPipelineConfig()
-            config.vector_store.store_type = vector_store_type
-            config.vector_store.store_path = store_path
-            config.log_level = "INFO"
+            with main_placeholder.container():
+                with st.spinner("🔧 Initialisation en mode sécurisé..."):
+                    
+                    config = RAGPipelineConfig()
+                    config.vector_store.store_type = vector_store_type
+                    config.vector_store.store_path = store_path
+                    config.log_level = "INFO"
+                    
+                    # Configuration minimaliste pour éviter les téléchargements
+                    config.embedding.text_model_name = "sentence-transformers/all-MiniLM-L6-v2"
+                    config.embedding.device = "cpu"
+                    config.embedding.batch_size = 8  # Plus petit batch
+                    
+                    # Désactiver temporairement les embeddings d'images
+                    # en attendant que le réseau soit stable
+                    
+                    self.pipeline = create_pipeline(config)
+                    st.session_state.pipeline_initialized = True
             
-            self.pipeline = create_pipeline(config)
-            st.session_state.pipeline_initialized = True
-            st.sidebar.success("Pipeline initialisée avec succès!")
+            main_placeholder.empty()
+            st.sidebar.success("✅ Pipeline initialisée en mode sécurisé!")
+            st.sidebar.info("ℹ️ Fonctionnalités limitées mais stables")
+            st.rerun()
             
         except Exception as e:
-            st.sidebar.error(f"Erreur d'initialisation: {e}")
+            main_placeholder.empty()
+            st.sidebar.error(f"❌ Échec même en mode sécurisé: {e}")
+            
+            # Suggestions de derniers recours
+            with st.sidebar.expander("🆘 Solutions de derniers recours"):
+                st.markdown("""
+                **Si le mode sécurisé échoue aussi :**
+                
+                1. **Redémarrez complètement l'application**
+                2. **Vérifiez les dépendances :**
+                   ```bash
+                   pip install --upgrade sentence-transformers
+                   pip install --upgrade torch
+                   ```
+                3. **Nettoyez le cache :**
+                   ```bash
+                   rm -rf ~/.cache/huggingface/
+                   rm -rf ~/.cache/torch/
+                   ```
+                4. **Utilisez l'interface en ligne de commande :**
+                   ```bash
+                   python main.py ingest --file document.pdf
+                   ```
+                """)
+            
+            self.pipeline = None
+            st.session_state.pipeline_initialized = False
+    
+    def initialize_pipeline(self, vector_store_type: str, store_path: str, 
+                          use_lightweight_models: bool = True, 
+                          force_cpu: bool = True, 
+                          offline_mode: bool = False):
+        """Initialise la pipeline avec cache"""
+        
+        # Configuration des modèles
+        if use_lightweight_models:
+            text_model = "sentence-transformers/all-MiniLM-L6-v2"
+            batch_size = 16
+        else:
+            text_model = "sentence-transformers/all-mpnet-base-v2"
+            batch_size = 32
+            
+        image_model = "openai/clip-vit-base-patch32"
+        device = "cpu" if force_cpu else "auto"
+        
+        # En mode offline, utiliser des modèles déjà téléchargés
+        if offline_mode:
+            import os
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+            os.environ['HF_DATASETS_OFFLINE'] = '1'
+        
+        # Placeholder pour le spinner
+        main_placeholder = st.empty()
+        
+        try:
+            with main_placeholder.container():
+                with st.spinner("🔄 Initialisation de la pipeline (avec cache)..."):
+                    
+                    # Utiliser le cache Streamlit pour éviter les rechargements
+                    pipeline, error = create_cached_pipeline(
+                        vector_store_type, store_path, text_model, 
+                        image_model, device, batch_size
+                    )
+                    
+                    if error:
+                        raise Exception(error)
+                    
+                    # Sauvegarder la configuration dans la session
+                    st.session_state.pipeline_config = {
+                        'vector_store_type': vector_store_type,
+                        'store_path': store_path,
+                        'text_model_name': text_model,
+                        'image_model_name': image_model,
+                        'device': device,
+                        'batch_size': batch_size
+                    }
+                    
+                    self.pipeline = pipeline
+                    st.session_state.pipeline_initialized = True
+            
+            main_placeholder.empty()
+            st.sidebar.success("✅ Pipeline initialisée avec cache!")
+            
+            # Afficher la configuration utilisée
+            config_info = f"""
+            **Configuration mise en cache :**
+            - Vector Store: {vector_store_type}
+            - Modèle texte: {text_model.split('/')[-1]}
+            - Device: {device}
+            - Batch size: {batch_size}
+            - Modèles légers: {use_lightweight_models}
+            """
+            st.sidebar.info(config_info)
+            
+            st.rerun()
+            
+        except Exception as e:
+            main_placeholder.empty()
+            
+            error_msg = str(e)
+            
+            # Diagnostic spécifique pour les erreurs réseau
+            if any(keyword in error_msg for keyword in [
+                "Connection aborted", "RemoteDisconnected", "HTTPSConnectionPool",
+                "timeout", "ConnectionError", "OSError"
+            ]):
+                st.sidebar.error("❌ Erreur de connexion réseau")
+                st.sidebar.warning("🌐 Problème de téléchargement des modèles")
+                
+                with st.sidebar.expander("🔧 Solutions réseau"):
+                    st.markdown("""
+                    **Problème de connexion détecté :**
+                    
+                    **Solutions immédiates :**
+                    1. 🔧 Cliquez sur "Mode Sécurisé"
+                    2. ✅ Activez "Mode offline" si modèles déjà téléchargés
+                    3. 🔄 Effacez le cache: Menu ⋮ → Clear cache
+                    4. 🔄 Réessayez dans quelques minutes
+                    
+                    **Commandes de pré-téléchargement :**
+                    ```bash
+                    python -c "
+                    from sentence_transformers import SentenceTransformer
+                    SentenceTransformer('all-MiniLM-L6-v2')
+                    print('Modèle téléchargé!')
+                    "
+                    ```
+                    """)
+                
+                # Boutons d'action rapide
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    if st.button("🧹 Clear Cache"):
+                        st.cache_resource.clear()
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Réessayer"):
+                        st.rerun()
+                        
+            else:
+                st.sidebar.error(f"❌ Erreur d'initialisation: {e}")
+                
+                with st.sidebar.expander("🔧 Détails de l'erreur"):
+                    st.code(str(e))
+            
+            self.pipeline = None
+            st.session_state.pipeline_initialized = False
+            st.session_state.pipeline_config = None
     
     def ingestion_interface(self):
         """Interface d'ingestion de documents"""
         st.header("📤 Ingestion de Documents")
         
-        if not st.session_state.pipeline_initialized:
+        if not st.session_state.pipeline_initialized or self.pipeline is None:
             st.warning("⚠️ Veuillez d'abord initialiser la pipeline dans la barre latérale")
+            
+            # Instructions pour l'utilisateur
+            st.info("""
+            **Pour commencer :**
+            1. Allez dans la barre latérale
+            2. Choisissez le type de Vector Store (ChromaDB recommandé)
+            3. Cliquez sur "🚀 Initialiser Pipeline"
+            4. Revenez ici pour ingérer vos documents
+            """)
+            
             return
         
         # Upload de fichier
@@ -287,8 +600,14 @@ class RAGWebInterface:
         """Interface de recherche"""
         st.header("🔍 Recherche dans les Documents")
         
-        if not st.session_state.pipeline_initialized:
+        if not st.session_state.pipeline_initialized or self.pipeline is None:
             st.warning("⚠️ Veuillez d'abord initialiser la pipeline et ingérer des documents")
+            st.info("""
+            **Pour effectuer une recherche :**
+            1. Initialisez la pipeline dans la barre latérale
+            2. Ingérez au moins un document dans l'onglet "Ingestion"
+            3. Revenez ici pour effectuer vos recherches
+            """)
             return
         
         # Interface de recherche
@@ -706,64 +1025,89 @@ class RAGWebInterface:
         """Interface des statistiques"""
         st.header("📈 Statistiques Globales")
         
-        if not st.session_state.pipeline_initialized:
+        if not st.session_state.pipeline_initialized or self.pipeline is None:
             st.warning("⚠️ Pipeline non initialisée")
+            st.info("💡 Veuillez d'abord initialiser la pipeline dans la barre latérale")
+            
+            # Afficher un exemple de configuration
+            st.subheader("🛠️ Configuration Recommandée")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.code("""
+# Configuration ChromaDB
+Vector Store: chroma
+Chemin: ./web_vector_store
+                """)
+            
+            with col2:
+                st.code("""
+# Configuration FAISS
+Vector Store: faiss
+Chemin: ./web_vector_store
+                """)
+            
             return
         
-        # Statistiques de la pipeline
-        stats = self.pipeline.get_statistics()
-        
-        # Métriques principales
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("📚 Documents", stats['pipeline_state']['documents_processed'])
-        with col2:
-            st.metric("📄 Chunks Totaux", stats['pipeline_state']['total_chunks'])
-        with col3:
-            st.metric("🧠 Embeddings", stats['pipeline_state']['total_embeddings'])
-        with col4:
-            st.metric("💾 Vector Store", stats['vector_store_count'])
-        
-        # Répartition par type
-        st.subheader("📊 Répartition par Type")
-        
-        type_data = {
-            'Type': ['Texte', 'Tableau', 'Image'],
-            'Nombre': [
-                stats['pipeline_state']['text_chunks'],
-                stats['pipeline_state']['table_chunks'],
-                stats['pipeline_state']['image_chunks']
-            ]
-        }
-        
-        df_types = pd.DataFrame(type_data)
-        fig_types = px.bar(df_types, x='Type', y='Nombre', color='Type')
-        st.plotly_chart(fig_types, use_container_width=True)
-        
-        # Configuration actuelle
-        st.subheader("⚙️ Configuration")
-        config_df = pd.DataFrame(list(stats['config_summary'].items()), 
-                                columns=['Paramètre', 'Valeur'])
-        st.dataframe(config_df, use_container_width=True)
-        
-        # Santé du système
-        st.subheader("🏥 Santé du Système")
-        health = self.pipeline.health_check()
-        
-        if health['status'] == 'healthy':
-            st.success("✅ Système en bonne santé")
-        elif health['status'] == 'degraded':
-            st.warning("⚠️ Système dégradé")
-        else:
-            st.error("❌ Système en échec")
-        
-        # Détails des composants
-        for component, status in health['components'].items():
-            if status['status'] == 'ok':
-                st.success(f"✅ {component}: OK")
+        try:
+            # Statistiques de la pipeline
+            stats = self.pipeline.get_statistics()
+            
+            # Métriques principales
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("📚 Documents", stats['pipeline_state']['documents_processed'])
+            with col2:
+                st.metric("📄 Chunks Totaux", stats['pipeline_state']['total_chunks'])
+            with col3:
+                st.metric("🧠 Embeddings", stats['pipeline_state']['total_embeddings'])
+            with col4:
+                st.metric("💾 Vector Store", stats['vector_store_count'])
+            
+            # Répartition par type
+            st.subheader("📊 Répartition par Type")
+            
+            type_data = {
+                'Type': ['Texte', 'Tableau', 'Image'],
+                'Nombre': [
+                    stats['pipeline_state']['text_chunks'],
+                    stats['pipeline_state']['table_chunks'],
+                    stats['pipeline_state']['image_chunks']
+                ]
+            }
+            
+            df_types = pd.DataFrame(type_data)
+            fig_types = px.bar(df_types, x='Type', y='Nombre', color='Type')
+            st.plotly_chart(fig_types, use_container_width=True)
+            
+            # Configuration actuelle
+            st.subheader("⚙️ Configuration")
+            config_df = pd.DataFrame(list(stats['config_summary'].items()), 
+                                    columns=['Paramètre', 'Valeur'])
+            st.dataframe(config_df, use_container_width=True)
+            
+            # Santé du système
+            st.subheader("🏥 Santé du Système")
+            health = self.pipeline.health_check()
+            
+            if health['status'] == 'healthy':
+                st.success("✅ Système en bonne santé")
+            elif health['status'] == 'degraded':
+                st.warning("⚠️ Système dégradé")
             else:
-                st.error(f"❌ {component}: {status.get('error', 'Erreur inconnue')}")
+                st.error("❌ Système en échec")
+            
+            # Détails des composants
+            for component, status in health['components'].items():
+                if status['status'] == 'ok':
+                    st.success(f"✅ {component}: OK")
+                else:
+                    st.error(f"❌ {component}: {status.get('error', 'Erreur inconnue')}")
+                    
+        except Exception as e:
+            st.error(f"❌ Erreur lors du chargement des statistiques: {e}")
+            st.info("🔄 Essayez de réinitialiser la pipeline")
     
     def configuration_interface(self):
         """Interface de configuration"""
