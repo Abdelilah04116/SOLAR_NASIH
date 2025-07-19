@@ -37,10 +37,10 @@ class VectorStoreConfig:
     collection_name: str = "multimodal_rag"
     
     # Paramètres spécifiques à ChromaDB
-    chroma_host: str = "localhost"
-    chroma_port: int = 8000
+    chromadb_host: str = "localhost"
+    chromadb_port: int = 8000
     
-    # Paramètres spécifiques à FAISS
+    # Paramètres spécifiques à FAISS (peuvent rester pour compatibilité)
     faiss_index_type: str = "flat"  # flat, ivf, hnsw
     faiss_metric: str = "L2"  # L2, IP
 
@@ -134,6 +134,8 @@ def load_config_from_env() -> RAGPipelineConfig:
     # Vector store
     config.vector_store.store_type = os.getenv("VECTOR_STORE_TYPE", "chroma")
     config.vector_store.store_path = os.getenv("VECTOR_STORE_PATH", "./vector_store")
+    config.vector_store.chromadb_host = os.getenv("CHROMADB_HOST", "localhost")
+    config.vector_store.chromadb_port = int(os.getenv("CHROMADB_PORT", 8000))
     
     # Logging
     config.log_level = os.getenv("LOG_LEVEL", "INFO")

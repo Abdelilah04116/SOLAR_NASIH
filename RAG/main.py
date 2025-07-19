@@ -179,7 +179,6 @@ def handle_search(pipeline, args):
     if not args.query:
         print("Erreur: Spécifiez une requête avec --query")
         return None
-    
     # Parsing des filtres
     filters = None
     if args.filters:
@@ -188,17 +187,15 @@ def handle_search(pipeline, args):
         except json.JSONDecodeError:
             print("Erreur: Filtres JSON invalides")
             return None
-    
     print(f"Recherche: '{args.query}' (k={args.k})")
-    
-    results = pipeline.search(args.query, args.k, filters)
-    
+    # Détection automatique du type de requête
+    from pipeline import is_image_query
+    query_type = "image" if is_image_query(args.query) else "text"
+    results = pipeline.search(args.query, args.k, filters, query_type=query_type)
     if not results:
         print("Aucun résultat trouvé")
         return []
-    
     print(f"\n{len(results)} résultat(s) trouvé(s):")
-    
     for i, result in enumerate(results, 1):
         print(f"\n--- Résultat {i} ---")
         print(f"ID: {result.chunk_id}")
@@ -206,12 +203,15 @@ def handle_search(pipeline, args):
         print(f"Page: {result.page_number}")
         print(f"Score: {result.score:.4f}")
         print(f"Contenu: {result.content[:200]}...")
-        
+        # Affiche le chemin de l'image si présent
+        image_path = result.metadata.get("image_path") or result.metadata.get("path") or None
+        if image_path:
+            print(f"Chemin de l'image: {image_path}")
+            print(f"Pour ouvrir l'image: file://{image_path}")
         if result.metadata.get("questions"):
             questions = result.metadata["questions"].split(" | ")
             if questions:
                 print(f"Questions: {questions[0][:100]}...")
-    
     return [r.to_dict() for r in results]
 
 def handle_visualize(pipeline, args):
@@ -514,7 +514,6 @@ python main.py search --query "tableaux" --filters '{
   pip install streamlit       # Pour interface web
   pip install scikit-learn    # Pour PCA, t-SNE
 
-Pour plus d'informations: https://github.com/votre-repo/rag-multimodal
     """
     print(help_text)
 

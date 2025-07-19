@@ -396,15 +396,19 @@ class ImageChunker:
     def chunk_image(self, content: ParsedContent, chunker_manager=None) -> List[Chunk]:
         """Traite les images comme des chunks uniques"""
         chunk_id = chunker_manager.get_next_chunk_id(ChunkType.IMAGE, content.page_number) if chunker_manager else f"image_{content.page_number}_{content.metadata.get('image_id', '0')}"
+        # Copie le chemin de l'image dans le metadata du chunk si présent
+        chunk_metadata = {
+            **content.metadata,
+            "chunking_method": "single_image"
+        }
+        if "image_path" in content.metadata:
+            chunk_metadata["image_path"] = content.metadata["image_path"]
         chunk = Chunk(
             id=chunk_id,
             content=content.content,
             chunk_type=ChunkType.IMAGE,
             page_number=content.page_number,
-            metadata={
-                **content.metadata,
-                "chunking_method": "single_image"
-            }
+            metadata=chunk_metadata
         )
         return [chunk]
 

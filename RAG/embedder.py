@@ -352,9 +352,20 @@ class MultimodalEmbedder:
         if query_type == "text":
             return self.text_embedder.embed_single_text(query)
         elif query_type == "image" and hasattr(self, 'image_embedder'):
-            # Pour les requêtes d'image, on s'attendrait à recevoir une image
-            # Ici on traite comme du texte par défaut
-            return self.text_embedder.embed_single_text(query)
+            # Pour la recherche d'images à partir d'une requête texte,
+            # on encode le texte avec le modèle CLIP (cross-modal)
+            inputs = self.image_embedder.processor(
+                text=[query],
+                return_tensors="pt",
+                padding=True
+            )
+            inputs = {k: v.to(self.image_embedder.device) for k, v in inputs.items()}
+            with torch.no_grad():
+                text_features = self.image_embedder.model.get_text_features(**inputs)
+                if self.image_embedder.normalize_embeddings:
+                    text_features = torch.nn.functional.normalize(text_features, p=2, dim=1)
+            embedding = text_features.cpu().numpy()[0]
+            return embedding.astype(np.float32)
         else:
             return self.text_embedder.embed_single_text(query)
     

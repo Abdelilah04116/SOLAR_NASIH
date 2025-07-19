@@ -224,28 +224,27 @@ class PDFParser(BaseParser):
     def _extract_images(self, page, page_num: int) -> List[ParsedContent]:
         """Extrait les images d'une page"""
         images = []
-        
         try:
             image_list = page.get_images(full=True)
-            
             for img_index, img in enumerate(image_list):
                 try:
                     xref = img[0]
                     pix = fitz.Pixmap(page.parent, xref)
-                    
-                    # Vérifier si l'image est dans un format supporté
                     if pix.n - pix.alpha < 4:  # GRAY ou RGB
-                        # Conversion en PNG
                         img_data = pix.tobytes("png")
-                        
-                        # Génération d'une description de l'image
                         description = self._generate_image_description(
                             img_data, img_index, page_num
                         )
-                        
-                        # Obtenir la position de l'image sur la page
                         img_bbox = self._get_image_bbox(page, xref)
-                        
+                        pdf_name = getattr(self.config, 'file_name', 'document')
+                        image_dir = 'RAG/documents/images/'
+                        image_filename = f"{pdf_name}_page{page_num+1}_img{img_index+1}.png"
+                        image_path = image_dir + image_filename
+                        # Sauvegarde physique de l'image
+                        import os
+                        os.makedirs(image_dir, exist_ok=True)
+                        with open(image_path, "wb") as f:
+                            f.write(img_data)
                         images.append(ParsedContent(
                             content=description,
                             content_type=ChunkType.IMAGE,
@@ -259,18 +258,14 @@ class PDFParser(BaseParser):
                                 "height": pix.height,
                                 "format": self.config.image_format,
                                 "colorspace": pix.colorspace.name if pix.colorspace else "unknown",
-                                "xref": xref
+                                "xref": xref,
+                                "image_path": image_path
                             }
                         ))
-                    
-                    pix = None
-                
                 except Exception as e:
-                    logger.warning(f"Erreur lors de l'extraction d'image {img_index} page {page_num + 1}: {e}")
-        
+                    logger.warning(f"Erreur extraction image page {page_num}, index {img_index}: {e}")
         except Exception as e:
-            logger.warning(f"Erreur lors de l'extraction d'images page {page_num + 1}: {e}")
-        
+            logger.error(f"Erreur lors de l'extraction des images page {page_num}: {e}")
         return images
     
     def _generate_image_description(self, img_data: bytes, img_index: int, page_num: int) -> str:

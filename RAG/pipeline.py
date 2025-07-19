@@ -38,6 +38,10 @@ def setup_logging(config: RAGPipelineConfig):
 
 logger = logging.getLogger(__name__)
 
+def is_image_query(query: str) -> bool:
+    mots_cles = ["image", "photo", "montre", "affiche", "voir", "illustration"]
+    return any(mot in query.lower() for mot in mots_cles)
+
 class MultimodalRAGPipeline:
     """Pipeline principale pour l'ingestion et l'indexation RAG multimodal"""
     
@@ -249,24 +253,32 @@ class MultimodalRAGPipeline:
     def search(self, query: str, k: int = 5, 
                filters: Optional[Dict[str, Any]] = None,
                query_type: str = "text") -> List[SearchResult]:
-        """Recherche de chunks similaires à une requête"""
         logger.info(f"Recherche: '{query[:50]}...' (k={k})")
-        
         try:
+            # Détection automatique du type de requête
+            if query_type == "text" and is_image_query(query):
+                query_type = "image"
             # Génération de l'embedding de la requête
             query_embedding = self.embedder.embed_query(query, query_type)
-            
             if len(query_embedding) == 0:
                 logger.warning("Embedding de requête vide")
                 return []
-            
             # Recherche dans la base vectorielle
-            results = self.vector_store.search(query_embedding, k, filters)
-            
+            if query_type == "image":
+                from config import VectorStoreConfig
+                from vector_store import ChromaVectorStore
+                image_store_config = VectorStoreConfig(
+                    collection_name=f"{self.config.vector_store.collection_name}_512",
+                    chromadb_host=self.config.vector_store.chromadb_host,
+                    chromadb_port=self.config.vector_store.chromadb_port,
+                    store_path=self.config.vector_store.store_path
+                )
+                image_store = ChromaVectorStore(image_store_config)
+                results = image_store.search(query_embedding, k, filters)
+            else:
+                results = self.vector_store.search(query_embedding, k, filters)
             logger.info(f"Recherche terminée: {len(results)} résultats trouvés")
-            
             return results
-            
         except Exception as e:
             logger.error(f"Erreur lors de la recherche: {e}")
             return []
