@@ -1,0 +1,429 @@
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+import logging
+import traceback
+from pathlib import Path
+import uvicorn
+import json
+import os
+from datetime import datetime
+
+# Imports locaux
+from models.schemas import *
+from graph.workflow import SolarNasihWorkflow
+from services.rag_service import RAGService
+from services.voice_service import VoiceService
+from utils.validators import validate_api_keys, sanitize_user_input
+from config.settings import settings
+from agents.multilingual_detector import MultilingualDetectorAgent
+
+# Configuration du logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/solar_nasih.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Création du dossier logs s'il n'existe pas
+os.makedirs('logs', exist_ok=True)
+os.makedirs('static/audio', exist_ok=True)
+os.makedirs('static/documents', exist_ok=True)
+
+# Initialisation de l'application
+app = FastAPI(
+    title="Solar Nasih - Système Multi-Agent",
+    description="Système multi-agent intelligent pour conseil en énergie solaire",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Configuration CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En production, spécifier les domaines autorisés
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Servir les fichiers statiques
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Variables globales pour les services
+workflow = None
+rag_service = None
+voice_service = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialisation au démarrage de l'application"""
+    global workflow, rag_service, voice_service
+    
+    try:
+        logger.info("Demarrage Solar Nasih SMA...")
+        
+        # Vérification des clés API
+        api_status = validate_api_keys()
+        if not all(api_status.values()):
+            logger.warning("⚠️ Certaines clés API manquent ou sont invalides")
+            logger.warning(f"Statut APIs: {api_status}")
+        
+        # Initialisation des services
+        logger.info("Initialisation des services...")
+        workflow = SolarNasihWorkflow()
+        rag_service = RAGService()
+        voice_service = VoiceService()
+        
+        # Test de santé des services
+        rag_health = await rag_service.health_check()
+        logger.info(f"📊 Statut RAG: {rag_health['status']}")
+        
+        # Vérification du workflow
+        workflow_status = workflow.get_workflow_status()
+        logger.info(f"🤖 Agents chargés: {workflow_status['agents_loaded']}")
+        
+        logger.info("✅ Solar Nasih SMA démarré avec succès!")
+        
+    except Exception as e:
+        logger.error(f"Erreur lors du démarrage: {e}")
+        logger.error(traceback.format_exc())
+        raise
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Nettoyage à l'arrêt de l'application"""
+    logger.info("🛑 Arrêt Solar Nasih SMA...")
+
+# Middleware pour logging des requêtes
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = datetime.now()
+    
+    # Log de la requête
+    logger.info(f"📨 {request.method} {request.url.path} - IP: {request.client.host}")
+    
+    response = await call_next(request)
+    
+    # Log de la réponse
+    process_time = (datetime.now() - start_time).total_seconds()
+    logger.info(f"📤 {response.status_code} - Temps: {process_time:.3f}s")
+    
+    return response
+
+# Dépendance pour vérifier l'initialisation des services
+async def get_workflow():
+    if workflow is None:
+        raise HTTPException(status_code=503, detail="Service non initialisé")
+    return workflow
+
+async def get_rag_service():
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="Service RAG non initialisé")
+    return rag_service
+
+async def get_voice_service():
+    if voice_service is None:
+        raise HTTPException(status_code=503, detail="Service vocal non initialisé")
+    return voice_service
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    workflow_service: SolarNasihWorkflow = Depends(get_workflow)
+):
+    """
+    Point d'entrée principal pour les conversations
+    """
+    try:
+        # Sanitisation de l'entrée utilisateur
+        sanitized_message = sanitize_user_input(request.message)
+        if not sanitized_message.strip():
+            raise HTTPException(status_code=400, detail="Message vide ou invalide")
+        logger.info(f"💬 Chat: {sanitized_message[:100]}...")
+        # Exécution du workflow multi-agent
+        result = await workflow_service.run(sanitized_message, request.context)
+        # Harmoniser la clé de retour : toujours 'response'
+        response = ChatResponse(
+            message=result.get("response") or result.get("message") or "[Aucune réponse générée]",
+            agent_used=result.get("agent_used", "task_divider"),
+            confidence=result.get("confidence", 0.8),
+            sources=result.get("sources", [])
+        )
+        logger.info(f"🤖 Agent utilisé: {result.get('agent_used', 'task_divider')} - Confiance: {response.confidence}")
+        return response.dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erreur chat: {e}")
+        logger.error(traceback.format_exc())
+        # Retourne toujours une clé 'response' même en cas d'erreur
+        return {
+            "response": f"Erreur lors du traitement: {str(e)}",
+            "agent_used": "task_divider",
+            "confidence": 0.0,
+            "sources": []
+        }
+
+@app.post("/upload-document")
+async def upload_document(
+    file: UploadFile = File(...),
+    rag_service_dep: RAGService = Depends(get_rag_service)
+):
+    """
+    Upload et indexation de documents (Active l'endpoint RAG existant)
+    """
+    try:
+        logger.info(f"📄 Upload document: {file.filename}")
+        
+        # Validation du fichier
+        from utils.validators import validate_file_upload
+        validation = validate_file_upload(file.filename, file.content_type, 0)  # Size vérifiée côté FastAPI
+        
+        if not validation['valid']:
+            raise HTTPException(status_code=400, detail=f"Fichier invalide: {validation['errors']}")
+        
+        # Appel au service RAG existant
+        result = await rag_service_dep.index_document(file)
+        
+        logger.info(f"✅ Document indexé: {result}")
+        
+        return {
+            "message": "Document indexé avec succès",
+            "document_id": result,
+            "filename": file.filename,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erreur upload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/voice-chat")
+async def voice_chat(
+    audio_file: UploadFile = File(...),
+    workflow_service: SolarNasihWorkflow = Depends(get_workflow),
+    voice_service_dep: VoiceService = Depends(get_voice_service)
+):
+    """
+    Traitement des requêtes vocales
+    """
+    try:
+        logger.info(f"🎤 Traitement vocal: {audio_file.filename}")
+        
+        # Validation du fichier audio
+        validation = voice_service_dep.validate_audio_file(audio_file)
+        if not validation['valid']:
+            raise HTTPException(status_code=400, detail=f"Fichier audio invalide: {validation['errors']}")
+        
+        # Traitement vocal via l'agent spécialisé
+        result = await workflow_service.run_voice_processing(audio_file)
+        
+        logger.info("✅ Traitement vocal terminé")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erreur vocal: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/simulate-energy")
+async def simulate_energy(
+    request: EnergySimulationRequest,
+    workflow_service: SolarNasihWorkflow = Depends(get_workflow)
+):
+    """
+    Simulation énergétique
+    """
+    try:
+        logger.info(f"⚡ Simulation énergétique: {request.surface_toit}m² - {request.localisation}")
+        
+        result = await workflow_service.run_energy_simulation(request.dict())
+        
+        logger.info("✅ Simulation terminée")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-document")
+async def generate_document(
+    request: DocumentGenerationRequest,
+    background_tasks: BackgroundTasks,
+    workflow_service: SolarNasihWorkflow = Depends(get_workflow)
+):
+    """
+    Génération de documents
+    """
+    try:
+        logger.info(f"📋 Génération document: {request.document_type}")
+        
+        result = await workflow_service.run_document_generation(request.dict())
+        
+        # Ajout d'une tâche de nettoyage en arrière-plan si nécessaire
+        if result.get('document_url'):
+            background_tasks.add_task(cleanup_temp_files, result['document_url'])
+        
+        logger.info("✅ Document généré")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur génération: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+async def health_check():
+    """
+    Vérification de l'état du système
+    """
+    try:
+        health_status = {
+            "status": "healthy",
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat(),
+            "services": {}
+        }
+        
+        # Vérification des services
+        if workflow:
+            workflow_status = workflow.get_workflow_status()
+            health_status["services"]["workflow"] = {
+                "status": "running",
+                "agents_loaded": workflow_status.get("agents_loaded", 0)
+            }
+        
+        if rag_service:
+            rag_health = await rag_service.health_check()
+            health_status["services"]["rag"] = rag_health
+        
+        # Vérification des APIs externes
+        api_status = validate_api_keys()
+        health_status["services"]["apis"] = api_status
+        
+        return health_status
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur health check: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/agents")
+async def list_agents(workflow_service: SolarNasihWorkflow = Depends(get_workflow)):
+    """
+    Liste des agents disponibles
+    """
+    try:
+        status = workflow_service.get_workflow_status()
+        return {
+            "agents": status.get("available_agents", []),
+            "total": status.get("agents_loaded", 0),
+            "workflow_compiled": status.get("workflow_compiled", False)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/documents")
+async def list_documents(rag_service_dep: RAGService = Depends(get_rag_service)):
+    """
+    Liste des documents indexés
+    """
+    try:
+        documents = await rag_service_dep.list_documents()
+        return {"documents": documents, "total": len(documents)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: str,
+    rag_service_dep: RAGService = Depends(get_rag_service)
+):
+    """
+    Suppression d'un document
+    """
+    try:
+        success = await rag_service_dep.delete_document(document_id)
+        if success:
+            return {"message": "Document supprimé avec succès"}
+        else:
+            raise HTTPException(status_code=404, detail="Document non trouvé")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def root():
+    """
+    Page d'accueil avec informations système
+    """
+    return {
+        "name": "Solar Nasih - Système Multi-Agent",
+        "version": "1.0.0",
+        "description": "Système multi-agent intelligent pour conseil en énergie solaire",
+        "endpoints": {
+            "chat": "/chat",
+            "voice": "/voice-chat", 
+            "simulation": "/simulate-energy",
+            "documents": "/generate-document",
+            "upload": "/upload-document",
+            "health": "/health",
+            "docs": "/docs"
+        },
+        "status": "operational"
+    }
+
+# Gestionnaire d'exceptions global
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"❌ Exception non gérée: {exc}")
+    logger.error(traceback.format_exc())
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Erreur interne du serveur",
+            "detail": str(exc) if settings.DEBUG else "Une erreur inattendue s'est produite",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+# Fonction utilitaire pour nettoyage
+async def cleanup_temp_files(file_path: str):
+    """Nettoie les fichiers temporaires après un délai"""
+    import asyncio
+    await asyncio.sleep(3600)  # Attendre 1 heure
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"🗑️ Fichier temporaire supprimé: {file_path}")
+    except Exception as e:
+        logger.warning(f"⚠️ Impossible de supprimer {file_path}: {e}")
+
+if __name__ == "__main__":
+    # Configuration selon l'environnement
+    debug_mode = os.getenv("DEBUG", "false").lower() == "true"
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000)),
+        reload=debug_mode,
+        log_level="info" if not debug_mode else "debug"
+    )
