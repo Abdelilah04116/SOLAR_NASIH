@@ -6,7 +6,7 @@
 
 ## 📋 Description
 
-SOLAR NASIH est un chatbot intelligent spécialisé dans l'énergie solaire, conçu spécifiquement pour le contexte marocain. Il combine les dernières technologies d'IA (LLM + RAG) pour offrir des conseils techniques, des calculs personnalisés et un accompagnement complet dans les projets d'énergie solaire.
+SOLAR NASIH est un chatbot intelligent spécialisé dans l'énergie solaire, conçu spécifiquement pour le contexte marocain. Il combine les dernières technologies d'IA (LLM + RAG +SMA) pour offrir des conseils techniques, des calculs personnalisés et un accompagnement complet dans les projets d'énergie solaire.
 
 ## 🎯 Fonctionnalités Principales
 
