@@ -3,16 +3,19 @@ from fastapi import UploadFile
 import httpx
 from config.settings import settings
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
+
+RAG_API_URL = "http://localhost:8001"  # adapte le port si besoin
 
 class RAGService:
     """
     Interface avec le système RAG existant
     """
     
-    def __init__(self):
-        self.rag_endpoint = settings.RAG_ENDPOINT
+    def __init__(self, base_url=RAG_API_URL):
+        self.base_url = base_url
         self.similarity_threshold = settings.RAG_SIMILARITY_THRESHOLD
         
     async def query(
@@ -35,20 +38,29 @@ class RAGService:
         
         try:
             async with httpx.AsyncClient() as client:
-                # Appel à l'endpoint RAG existant
+                # Appel à l'endpoint RAG correct /search/
                 response = await client.post(
-                    f"{self.rag_endpoint}/query",
+                    f"{self.base_url}/search/",
                     json={
-                        "question": query,
-                        "language": language,
-                        "max_results": max_results,
-                        "similarity_threshold": self.similarity_threshold
+                        "query": query,
+                        "method": "hybrid",
+                        "top_k": max_results,
+                        "generate_response": True
                     },
                     timeout=30.0
                 )
                 
                 if response.status_code == 200:
-                    return response.json()
+                    rag_data = response.json()
+                    
+                    # Transformation de la réponse pour correspondre au format attendu
+                    return {
+                        "answer": rag_data.get("generated_response", {}).get("response", ""),
+                        "confidence": rag_data.get("generated_response", {}).get("confidence", 0.8),
+                        "sources": [result.get("source", "") for result in rag_data.get("results", [])],
+                        "similarity_score": rag_data.get("results", [{}])[0].get("score", 0.0) if rag_data.get("results") else 0.0,
+                        "total_results": rag_data.get("total_results", 0)
+                    }
                 else:
                     logger.error(f"Erreur RAG: {response.status_code} - {response.text}")
                     return self._fallback_response(query)
@@ -77,16 +89,16 @@ class RAGService:
                 # Préparation du fichier pour l'upload
                 files = {"file": (file.filename, await file.read(), file.content_type)}
                 
-                # Appel à l'endpoint d'indexation RAG
+                # Appel à l'endpoint d'indexation RAG correct
                 response = await client.post(
-                    f"{self.rag_endpoint}/upload",
+                    f"{self.base_url}/upload/file",
                     files=files,
                     timeout=60.0
                 )
                 
                 if response.status_code == 200:
                     result = response.json()
-                    return result.get("document_id", "unknown")
+                    return result.get("upload_id", "unknown")
                 else:
                     logger.error(f"Erreur indexation RAG: {response.status_code}")
                     raise Exception(f"Erreur lors de l'indexation: {response.status_code}")
@@ -109,7 +121,7 @@ class RAGService:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.rag_endpoint}/documents/{document_id}",
+                    f"{self.base_url}/status",
                     timeout=10.0
                 )
                 
@@ -133,12 +145,13 @@ class RAGService:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.rag_endpoint}/documents",
+                    f"{self.base_url}/status",
                     timeout=10.0
                 )
                 
                 if response.status_code == 200:
-                    return response.json().get("documents", [])
+                    data = response.json()
+                    return data.get("documents", [])
                 else:
                     return []
                     
@@ -158,13 +171,9 @@ class RAGService:
         """
         
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.delete(
-                    f"{self.rag_endpoint}/documents/{document_id}",
-                    timeout=10.0
-                )
-                
-                return response.status_code == 200
+            # Le système RAG actuel ne supporte pas la suppression
+            logger.warning("Suppression de document non supportée par le système RAG actuel")
+            return False
                 
         except Exception as e:
             logger.error(f"Erreur lors de la suppression du document: {e}")
@@ -188,23 +197,22 @@ class RAGService:
         
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.rag_endpoint}/similar",
-                    json={
-                        "text": text,
-                        "limit": limit,
-                        "threshold": self.similarity_threshold
+                response = await client.get(
+                    f"{self.base_url}/search/similar",
+                    params={
+                        "query": text,
+                        "top_k": limit
                     },
-                    timeout=20.0
+                    timeout=30.0
                 )
                 
                 if response.status_code == 200:
-                    return response.json().get("similar_documents", [])
+                    return response.json().get("results", [])
                 else:
                     return []
                     
         except Exception as e:
-            logger.error(f"Erreur lors de la recherche de similarité: {e}")
+            logger.error(f"Erreur lors de la recherche similaire: {e}")
             return []
     
     def _fallback_response(self, query: str) -> Dict[str, Any]:
@@ -241,28 +249,37 @@ class RAGService:
     
     async def health_check(self) -> Dict[str, Any]:
         """
-        Vérifie l'état du service RAG
+        Vérifie la santé du système RAG
         
         Returns:
-            État du service
+            Statut de santé du système RAG
         """
         
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.rag_endpoint}/health",
+                    f"{self.base_url}/health/",
                     timeout=5.0
                 )
                 
-                return {
-                    "status": "healthy" if response.status_code == 200 else "unhealthy",
-                    "endpoint": self.rag_endpoint,
-                    "response_time": response.elapsed.total_seconds()
-                }
-                
+                if response.status_code == 200:
+                    health_data = response.json()
+                    return {
+                        "status": "healthy",
+                        "endpoint": self.base_url,
+                        "response_time": response.elapsed.total_seconds(),
+                        "rag_status": health_data
+                    }
+                else:
+                    return {
+                        "status": "unhealthy",
+                        "endpoint": self.base_url,
+                        "error": f"HTTP {response.status_code}"
+                    }
+                    
         except Exception as e:
             return {
                 "status": "unhealthy",
-                "endpoint": self.rag_endpoint,
+                "endpoint": self.base_url,
                 "error": str(e)
             }

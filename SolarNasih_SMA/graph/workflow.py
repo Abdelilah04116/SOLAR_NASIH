@@ -138,7 +138,24 @@ class SolarNasihWorkflow:
             Type d'agent vers lequel router
         """
         
-        return state["agent_route"]
+        agent_route = state.get("agent_route", AgentType.TASK_DIVIDER)
+        
+        # Si agent_route est déjà un AgentType, le retourner directement
+        if isinstance(agent_route, AgentType):
+            return agent_route
+        
+        # Si c'est une string, essayer de la convertir en AgentType
+        if isinstance(agent_route, str):
+            try:
+                return AgentType(agent_route)
+            except ValueError:
+                # Si la conversion échoue, retourner TASK_DIVIDER par défaut
+                logger.warning(f"Agent route invalide: {agent_route}, utilisation de TASK_DIVIDER par défaut")
+                return AgentType.TASK_DIVIDER
+        
+        # Si c'est un autre type, retourner TASK_DIVIDER par défaut
+        logger.warning(f"Type d'agent route inattendu: {type(agent_route)}, utilisation de TASK_DIVIDER par défaut")
+        return AgentType.TASK_DIVIDER
     
     async def run(self, message: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -264,20 +281,42 @@ class SolarNasihWorkflow:
         """
         Formate le résultat final du workflow
         """
-        agent_route = state.get("agent_route", AgentType.TASK_DIVIDER)
-        if isinstance(agent_route, AgentType):
-            agent_route = agent_route.value
-        return {
-            "response": state.get("response", ""),
-            "agent_used": agent_route,
-            "confidence": state.get("confidence_score", 0.0),
-            "sources": state.get("sources", []),
-            "processing_steps": state.get("processing_steps", []),
-            "detected_language": state.get("detected_language", "fr"),
-            "user_intent": state.get("user_intent", ""),
-            "errors": state.get("errors", []),
-            "debug_info": state.get("debug_info", {})
-        }
+        try:
+            agent_route = state.get("agent_route", AgentType.TASK_DIVIDER)
+            if isinstance(agent_route, AgentType):
+                agent_route_val = agent_route.value
+            else:
+                agent_route_val = str(agent_route)
+            
+            # Récupération de la réponse
+            response = state.get("response", "")
+            if not response and state.get("errors"):
+                response = f"Erreur lors du traitement: {', '.join(state['errors'])}"
+            
+            return {
+                "response": response,
+                "agent_used": agent_route_val,
+                "confidence": state.get("confidence_score", 0.0),
+                "sources": state.get("sources", []),
+                "processing_steps": state.get("processing_steps", []),
+                "detected_language": state.get("detected_language", "fr"),
+                "user_intent": state.get("user_intent", ""),
+                "errors": state.get("errors", []),
+                "debug_info": state.get("debug_info", {})
+            }
+        except Exception as e:
+            logger.error(f"Erreur dans _format_final_result: {e}")
+            return {
+                "response": f"Erreur lors du formatage de la réponse: {str(e)}",
+                "agent_used": "task_divider",
+                "confidence": 0.0,
+                "sources": [],
+                "processing_steps": [],
+                "detected_language": "fr",
+                "user_intent": "",
+                "errors": [str(e)],
+                "debug_info": {}
+            }
     
     def get_workflow_status(self) -> Dict[str, Any]:
         """

@@ -4,6 +4,7 @@ import { sendOutline, send, cloudUploadOutline, documentOutline, micOutline } fr
 import { useRef, useState, useEffect } from "react";
 import useChat from "../../store/store";
 import { createMessage } from "../../utils/createMessage";
+import { askSMA } from "../../services/chatService";
 
 export default function UserQuery() {
   const [query, setQuery] = useState("");
@@ -85,16 +86,26 @@ export default function UserQuery() {
       return;
     }
     
-    // Sinon, envoyer le texte normal
-    if (query || importedFiles.length > 0) {
-      if (query) {
-        addChat(createMessage("user", query, "text"));
+    // Envoi texte SMA
+    if (query) {
+      addChat(createMessage("user", query, "text"));
+      try {
+        const res = await askSMA(query);
+        addChat(createMessage("assistant", res.message || res.response || "Aucune réponse reçue.", "text"));
+      } catch (err: any) {
+        addChat(createMessage("assistant", "Erreur SMA : " + (err.message || "Erreur inconnue"), "text"));
       }
+      setQuery("");
+      if (textareaRef.current) textareaRef.current.style.height = "30px";
+      return;
+    }
+
+    // Gestion de l'envoi de fichiers
+    if (importedFiles.length > 0) {
       importedFiles.forEach((file) => {
         addChat(createMessage("user", file.name, "document"));
       });
       addChat(createMessage("assistant", "Processing your documents message ....", "text"));
-      setQuery("");
       setImportedFiles([]);
       if (textareaRef.current) textareaRef.current.style.height = "30px";
     }

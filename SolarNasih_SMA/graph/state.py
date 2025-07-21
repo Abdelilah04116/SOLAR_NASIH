@@ -86,21 +86,32 @@ def update_state_with_agent_result(
     """
     # Mise à jour des résultats
     state["agent_results"][agent_type.value] = result
+    
     # Mise à jour de la réponse si fournie
     if "response" in result:
         resp = result["response"]
-        if isinstance(resp, AgentType):
-            state["response"] = "Solar Nasih est un assistant intelligent dédié à l'énergie solaire. Posez-moi vos questions sur l'installation, la réglementation, la simulation, la certification ou le financement."
-        else:
+        # Vérifier que la réponse est une chaîne de caractères valide
+        if isinstance(resp, str) and resp.strip():
             state["response"] = resp
+        elif isinstance(resp, AgentType):
+            # Si c'est un AgentType, on garde la réponse précédente ou on met un message par défaut
+            if not state.get("response") or not state["response"].strip():
+                state["response"] = "Solar Nasih est un assistant intelligent dédié à l'énergie solaire. Posez-moi vos questions sur l'installation, la réglementation, la simulation, la certification ou le financement."
+        else:
+            # Pour les autres types, on convertit en string
+            state["response"] = str(resp) if resp else ""
+    
     # Mise à jour de la confiance
     if "confidence" in result:
         state["confidence_score"] = result["confidence"]
+    
     # Mise à jour des sources
     if "sources" in result:
         state["sources"].extend(result["sources"])
+    
     # Ajout de l'étape de processing
     state["processing_steps"].append(f"Processed by {agent_type.value}")
+    
     return state
 
 def add_error_to_state(state: SolarNasihState, error: str) -> SolarNasihState:

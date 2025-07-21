@@ -4,7 +4,11 @@ from agents.base_agent import BaseAgent
 from models.schemas import AgentType, AgentState
 from services.tavily_service import TavilyService
 from services.gemini_service import GeminiService
+from services.rag_service import RAGService
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TaskDividerAgent(BaseAgent):
     """
@@ -18,6 +22,7 @@ class TaskDividerAgent(BaseAgent):
         )
         self.tavily_service = TavilyService()
         self.gemini_service = GeminiService()
+        self.rag_service = RAGService()  # Service RAG pour appels directs
         
         # Patterns de routage COMPLETS pour tous les agents
         self.route_patterns = {
@@ -69,7 +74,7 @@ class TaskDividerAgent(BaseAgent):
                 r"indexer", r"ajouter document", r"upload", r"intégrer",
                 r"base documentaire", r"catalogue"
             ]
-    }
+        }
 
     
     def _init_tools(self) -> List[Tool]:
@@ -209,59 +214,318 @@ class TaskDividerAgent(BaseAgent):
         Si aucun agent ne peut répondre, utilise Gemini (LLM) pour générer une réponse intelligente.
         """
         from models.schemas import AgentState as AgentStateObj
-        query_lower = state.current_message.lower() if hasattr(state, 'current_message') else state.get('current_message', '').lower()
-        detected_agents = set()
-        explanations = []
+        
+        # Détection des agents appropriés
+        detected_agents = self._detect_relevant_agents(state.current_message)
+        
+        # Récupération des réponses des agents
+        agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
+        
+        # Construction de la réponse finale
+        final_response = self._build_final_response(agent_responses, detected_agents)
+        
+        # Détermination de l'agent principal utilisé
+        primary_agent = detected_agents[0] if detected_agents else AgentType.TASK_DIVIDER
+        
+        return {
+            "response": final_response,
+            "confidence": self._calculate_overall_confidence(agent_responses),
+            "sources": self._collect_sources(agent_responses),
+            "agent_used": primary_agent.value,  # Utiliser l'agent principal détecté
+            "agent_responses": agent_responses  # Nouvelle propriété pour l'affichage
+        }
+    
+    def _detect_relevant_agents(self, message: str) -> List[AgentType]:
+        """Détecte les agents pertinents pour la requête avec stratégie RAG-first"""
+        query_lower = message.lower()
+        detected_agents = []
+        
+        # Vérification des patterns pour les agents spécialisés
         for agent_type, patterns in self.route_patterns.items():
+            # Ignorer RAG_SYSTEM car il sera traité séparément
+            if agent_type == AgentType.RAG_SYSTEM:
+                continue
+                
             for pattern in patterns:
                 if re.search(pattern, query_lower):
-                    detected_agents.add(agent_type)
-                    explanations.append(f"Mot-clé '{pattern}' → {agent_type.value}")
+                    detected_agents.append(agent_type)
                     break
-        if not detected_agents:
-            detected_agents.add(AgentType.RAG_SYSTEM)
-            explanations.append("Aucun mot-clé spécifique détecté, routage vers RAG_SYSTEM (connaissances générales)")
+        
+        # Ajout du RAG_SYSTEM en premier pour vérification prioritaire
+        # Le RAG est toujours pertinent pour enrichir le contexte
+        detected_agents.insert(0, AgentType.RAG_SYSTEM)
+        
+        # Si aucun agent spécialisé détecté, garder seulement RAG
+        if len(detected_agents) == 1:
+            logger.info("🔍 Aucun agent spécialisé détecté, utilisation du RAG uniquement")
+        
+        return detected_agents
+    
+    async def _get_agent_responses(self, state: AgentState, agents: List[AgentType], agents_map: dict) -> List[Dict[str, Any]]:
+        """Récupère les réponses des agents avec stratégie RAG-first"""
         responses = []
-        sources = set()
-        confidences = []
-        agent_answered = False
-        for agent_type in detected_agents:
+        
+        # 1. 🔍 VÉRIFICATION RAG EN PREMIER - Appel direct au système RAG
+        logger.info("🔍 Vérification RAG en premier...")
+        rag_response = await self._check_rag_first(state.current_message)
+        
+        if rag_response and rag_response.get("success"):
+            responses.append(rag_response)
+            logger.info("✅ RAG a trouvé une réponse pertinente")
+        else:
+            logger.info("❌ RAG n'a pas trouvé de réponse pertinente")
+        
+        # 2. 🤖 APPEL DES AGENTS SPÉCIALISÉS (si RAG n'a pas de réponse ou en complément)
+        for agent_type in agents:
+            # Ignorer RAG_SYSTEM car déjà traité directement
+            if agent_type == AgentType.RAG_SYSTEM:
+                continue
+                
             agent = agents_map.get(agent_type)
             if agent:
                 try:
-                    # Conversion dict -> AgentState si besoin
-                    agent_state = state
-                    if isinstance(state, dict):
-                        agent_state = AgentStateObj(**state)
-                    result = await agent.process(agent_state, agents_map) if agent_type == AgentType.TASK_DIVIDER else await agent.process(agent_state)
-                    resp = result.get("response", "")
-                    if resp and not resp.lower().startswith("solar nasih est un assistant"):
-                        responses.append(f"Réponse de {agent_type.value} : {resp}")
-                        agent_answered = True
-                    if "sources" in result:
-                        sources.update(result["sources"])
-                    if "confidence" in result:
-                        confidences.append(result["confidence"])
+                    # Préparation de l'état pour l'agent
+                    agent_state = self._prepare_agent_state(state, agent_type)
+                    
+                    # Appel de l'agent
+                    if agent_type == AgentType.TASK_DIVIDER:
+                        result = await agent.process(agent_state, agents_map)
+                    else:
+                        result = await agent.process(agent_state)
+                    
+                    # Validation et nettoyage de la réponse
+                    cleaned_response = self._clean_agent_response(result, agent_type)
+                    
+                    if cleaned_response:
+                        responses.append({
+                            "agent_type": agent_type.value,
+                            "response": cleaned_response,
+                            "confidence": result.get("confidence", 0.7),
+                            "sources": result.get("sources", []),
+                            "success": True
+                        })
+                        logger.info(f"✅ {agent_type.value} a généré une réponse")
+                    else:
+                        responses.append({
+                            "agent_type": agent_type.value,
+                            "response": f"L'agent {agent_type.value} n'a pas pu générer de réponse.",
+                            "confidence": 0.0,
+                            "sources": [],
+                            "success": False
+                        })
+                        logger.info(f"❌ {agent_type.value} n'a pas généré de réponse")
+                        
                 except Exception as e:
-                    responses.append(f"Erreur lors de l'appel à l'agent {agent_type.value} : {str(e)}")
+                    responses.append({
+                        "agent_type": agent_type.value,
+                        "response": f"Erreur lors de l'appel à l'agent {agent_type.value}: {str(e)}",
+                        "confidence": 0.0,
+                        "sources": [],
+                        "success": False,
+                        "error": str(e)
+                    })
+                    logger.error(f"❌ Erreur avec {agent_type.value}: {e}")
             else:
-                responses.append(f"Aucun agent {agent_type.value} disponible.")
-        if not agent_answered:
-            gemini_resp = await self.gemini_service.generate_response(state.current_message if hasattr(state, 'current_message') else state.get('current_message', ''))
-            responses.append(f"Réponse générée par l'IA Gemini : {gemini_resp}")
-            sources.add("Gemini LLM fallback")
-            confidences.append(0.7)
-        if responses:
-            response_text = "\n\n".join(responses)
-        else:
-            response_text = "Solar Nasih est un assistant intelligent dédié à l'énergie solaire. Posez-moi vos questions sur l'installation, la réglementation, la simulation, la certification ou le financement."
-        routing_explanation = "Division des tâches :\n" + "\n".join(explanations)
-        final_response = f"{routing_explanation}\n\n{response_text}"
-        return {
-            "response": final_response,
-            "confidence": float(sum(confidences)) / len(confidences) if confidences else 0.7,
-            "sources": list(sources) if sources else ["Gemini LLM fallback"]
-        }
+                responses.append({
+                    "agent_type": agent_type.value,
+                    "response": f"Agent {agent_type.value} non disponible.",
+                    "confidence": 0.0,
+                    "sources": [],
+                    "success": False
+                })
+                logger.warning(f"⚠️ {agent_type.value} non disponible")
+        
+        return responses
+    
+    async def _check_rag_first(self, query: str) -> Dict[str, Any]:
+        """Vérifie d'abord le système RAG pour une réponse pertinente"""
+        try:
+            logger.info(f"🔍 Appel direct au système RAG pour: {query[:50]}...")
+            
+            # Appel direct au service RAG
+            rag_result = await self.rag_service.query(
+                query=query,
+                language="fr",
+                max_results=3
+            )
+            
+            # Vérification de la qualité de la réponse RAG
+            if self._is_rag_response_quality(rag_result):
+                return {
+                    "agent_type": AgentType.RAG_SYSTEM.value,
+                    "response": rag_result.get("answer", ""),
+                    "confidence": rag_result.get("confidence", 0.8),
+                    "sources": rag_result.get("sources", []),
+                    "success": True,
+                    "rag_score": rag_result.get("similarity_score", 0.0)
+                }
+            else:
+                logger.info("❌ Réponse RAG de qualité insuffisante")
+                return {
+                    "agent_type": AgentType.RAG_SYSTEM.value,
+                    "response": "Aucune information pertinente trouvée dans la base de connaissances.",
+                    "confidence": 0.0,
+                    "sources": [],
+                    "success": False
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de l'appel RAG: {e}")
+            return {
+                "agent_type": AgentType.RAG_SYSTEM.value,
+                "response": f"Erreur lors de la consultation de la base de connaissances: {str(e)}",
+                "confidence": 0.0,
+                "sources": [],
+                "success": False,
+                "error": str(e)
+            }
+    
+    def _is_rag_response_quality(self, rag_result: Dict[str, Any]) -> bool:
+        """Vérifie si la réponse RAG est de qualité suffisante"""
+        try:
+            # Vérification de la présence d'une réponse
+            answer = rag_result.get("answer", "")
+            if not answer or len(answer.strip()) < 20:
+                return False
+            
+            # Vérification du score de similarité
+            similarity_score = rag_result.get("similarity_score", 0.0)
+            if similarity_score < 0.6:  # Seuil de qualité
+                return False
+            
+            # Vérification de la confiance
+            confidence = rag_result.get("confidence", 0.0)
+            if confidence < 0.5:  # Seuil de confiance
+                return False
+            
+            # Vérification des sources
+            sources = rag_result.get("sources", [])
+            if not sources:
+                return False
+            
+            logger.info(f"✅ Qualité RAG validée - Score: {similarity_score:.2f}, Confiance: {confidence:.2f}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification de qualité RAG: {e}")
+            return False
+    
+    def _prepare_agent_state(self, state: AgentState, agent_type: AgentType) -> AgentState:
+        """Prépare l'état spécifique pour un agent"""
+        # Création d'un nouvel état avec le bon agent_route
+        agent_state = AgentState(
+            current_message=state.current_message,
+            detected_language=state.detected_language,
+            user_intent=state.user_intent,
+            agent_route=agent_type,
+            context=state.context,
+            response="",
+            confidence=0.0,
+            sources=[],
+            processing_history=state.processing_history
+        )
+        return agent_state
+    
+    def _clean_agent_response(self, result: Dict[str, Any], agent_type: AgentType) -> str:
+        """Nettoie et valide la réponse d'un agent"""
+        response = result.get("response", "")
+        
+        # Vérification que la réponse est valide
+        if not response or not isinstance(response, str):
+            return ""
+        
+        # Suppression des réponses par défaut
+        default_responses = [
+            "solar nasih est un assistant",
+            "je n'ai pas pu traiter",
+            "aucune réponse générée"
+        ]
+        
+        response_lower = response.lower()
+        for default in default_responses:
+            if default in response_lower:
+                return ""
+        
+        return response.strip()
+    
+    def _build_final_response(self, agent_responses: List[Dict[str, Any]], detected_agents: List[AgentType]) -> str:
+        """Construit la réponse finale en agrégeant les réponses des agents avec priorité RAG"""
+        successful_responses = [r for r in agent_responses if r["success"] and r["response"]]
+        
+        if not successful_responses:
+            # Fallback vers Gemini si aucun agent n'a réussi
+            return self._get_fallback_response()
+        
+        # Construction de la réponse
+        parts = []
+        
+        # En-tête avec explication du routage
+        routing_explanation = "🔍 **Analyse de votre demande :**\n"
+        for agent_type in detected_agents:
+            routing_explanation += f"• {agent_type.value.replace('_', ' ').title()}\n"
+        parts.append(routing_explanation)
+        
+        # Séparation des réponses RAG et spécialisées
+        rag_responses = [r for r in successful_responses if r["agent_type"] == AgentType.RAG_SYSTEM.value]
+        specialized_responses = [r for r in successful_responses if r["agent_type"] != AgentType.RAG_SYSTEM.value]
+        
+        # 1. 📚 Affichage des réponses RAG en premier (si disponibles)
+        if rag_responses:
+            parts.append("📚 **Informations de la base de connaissances :**")
+            for response in rag_responses:
+                confidence = response["confidence"]
+                rag_score = response.get("rag_score", 0.0)
+                confidence_emoji = "🟢" if confidence > 0.8 else "🟡" if confidence > 0.5 else "🔴"
+                
+                # Affichage avec score de similarité RAG
+                score_info = f" (similarité: {rag_score:.1%})" if rag_score > 0 else ""
+                parts.append(f"**{confidence_emoji} Base de connaissances** (confiance: {confidence:.1%}{score_info}):\n{response['response']}\n")
+        
+        # 2. 🤖 Affichage des réponses spécialisées
+        if specialized_responses:
+            parts.append("🤖 **Réponses des agents spécialisés :**")
+            for response in specialized_responses:
+                agent_name = response["agent_type"].replace("_", " ").title()
+                confidence = response["confidence"]
+                
+                # Ajout d'un indicateur de confiance
+                confidence_emoji = "🟢" if confidence > 0.8 else "🟡" if confidence > 0.5 else "🔴"
+                
+                parts.append(f"**{confidence_emoji} {agent_name}** (confiance: {confidence:.1%}):\n{response['response']}\n")
+        
+        return "\n".join(parts)
+    
+    def _get_fallback_response(self) -> str:
+        """Génère une réponse de fallback avec Gemini"""
+        try:
+            # Utilisation de Gemini pour une réponse de fallback
+            fallback_prompt = """
+            Tu es Solar Nasih, un assistant spécialisé en énergie solaire.
+            L'utilisateur a posé une question mais les agents spécialisés n'ont pas pu répondre.
+            Génère une réponse utile et informative en français, en restant dans le domaine de l'énergie solaire.
+            """
+            # Note: Cette méthode nécessiterait l'intégration avec Gemini
+            return "Je n'ai pas pu traiter votre demande avec les agents spécialisés, mais je reste à votre disposition pour toute question sur l'énergie solaire."
+        except:
+            return "Solar Nasih est un assistant intelligent dédié à l'énergie solaire. Posez-moi vos questions sur l'installation, la réglementation, la simulation, la certification ou le financement."
+    
+    def _calculate_overall_confidence(self, agent_responses: List[Dict[str, Any]]) -> float:
+        """Calcule la confiance globale basée sur les réponses des agents"""
+        successful_responses = [r for r in agent_responses if r["success"]]
+        
+        if not successful_responses:
+            return 0.3
+        
+        confidences = [r["confidence"] for r in successful_responses]
+        return sum(confidences) / len(confidences)
+    
+    def _collect_sources(self, agent_responses: List[Dict[str, Any]]) -> List[str]:
+        """Collecte toutes les sources des agents"""
+        sources = set()
+        for response in agent_responses:
+            if response["success"]:
+                sources.update(response.get("sources", []))
+        return list(sources)
     
     def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> float:
         """Le diviseur de tâches peut toujours traiter les requêtes"""

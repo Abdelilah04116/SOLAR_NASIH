@@ -147,25 +147,99 @@ async def chat(
         if not sanitized_message.strip():
             raise HTTPException(status_code=400, detail="Message vide ou invalide")
         logger.info(f"💬 Chat: {sanitized_message[:100]}...")
-        # Exécution du workflow multi-agent
-        result = await workflow_service.run(sanitized_message, request.context)
-        # Harmoniser la clé de retour : toujours 'response'
-        response = ChatResponse(
-            message=result.get("response") or result.get("message") or "[Aucune réponse générée]",
-            agent_used=result.get("agent_used", "task_divider"),
-            confidence=result.get("confidence", 0.8),
-            sources=result.get("sources", [])
-        )
-        logger.info(f"🤖 Agent utilisé: {result.get('agent_used', 'task_divider')} - Confiance: {response.confidence}")
-        return response.dict()
+        
+        # Utilisation directe du TaskDividerAgent au lieu du workflow complexe
+        try:
+            from agents.task_divider import TaskDividerAgent
+            from models.schemas import AgentState
+            
+            # Création de l'état pour l'agent
+            agent_state = AgentState(
+                current_message=sanitized_message,
+                detected_language="fr",
+                user_intent="",
+                agent_route=AgentType.TASK_DIVIDER,
+                context=request.context or {},
+                response="",
+                confidence=0.0,
+                sources=[],
+                processing_history=[]
+            )
+            
+            # Récupération du mapping des agents depuis le workflow
+            agents_map = workflow_service.agents
+            
+            # Appel direct du TaskDividerAgent
+            task_divider = TaskDividerAgent()
+            result = await task_divider.process(agent_state, agents_map)
+            
+            # Extraction de la réponse
+            response_text = result.get("response", "")
+            agent_used = result.get("agent_used", "task_divider")
+            confidence = result.get("confidence", 0.7)
+            sources = result.get("sources", [])
+            agent_responses = result.get("agent_responses", [])
+            
+            logger.info(f"🤖 Agent principal utilisé: {agent_used} - Confiance: {confidence}")
+            logger.info(f"📝 Réponse générée: {response_text[:100]}...")
+            
+            # Création de la réponse structurée
+            response_dict = {
+                "message": response_text,
+                "agent_used": agent_used,
+                "confidence": confidence,
+                "sources": sources
+            }
+            
+            # Ajout de la propriété agent_responses si disponible
+            if agent_responses:
+                response_dict["agent_responses"] = agent_responses
+            
+            return response_dict
+            
+        except Exception as agent_error:
+            logger.error(f"Erreur avec TaskDividerAgent: {agent_error}")
+            # Fallback vers le workflow original
+            result = await workflow_service.run(sanitized_message, request.context)
+            
+            # Extraction de la réponse avec gestion d'erreur
+            response_text = ""
+            if isinstance(result, dict):
+                response_text = result.get("response") or result.get("message") or ""
+                if not response_text and "error" in result:
+                    response_text = f"Erreur: {result['error']}"
+                if not response_text:
+                    response_text = "Je n'ai pas pu traiter votre demande. Pouvez-vous reformuler votre question ?"
+            else:
+                response_text = str(result) if result else "Aucune réponse générée"
+            
+            # Création de la réponse structurée
+            response = ChatResponse(
+                message=response_text,
+                agent_used=result.get("agent_used", "task_divider") if isinstance(result, dict) else "task_divider",
+                confidence=result.get("confidence", 0.8) if isinstance(result, dict) else 0.5,
+                sources=result.get("sources", []) if isinstance(result, dict) else []
+            )
+            
+            logger.info(f"🤖 Agent utilisé (fallback): {response.agent_used} - Confiance: {response.confidence}")
+            logger.info(f"📝 Réponse générée (fallback): {response_text[:100]}...")
+            
+            # Ajout de la propriété agent_responses si disponible
+            response_dict = response.dict()
+            if isinstance(result, dict) and "agent_responses" in result:
+                response_dict["agent_responses"] = result["agent_responses"]
+            
+            return response_dict
+        
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Erreur chat: {e}")
         logger.error(traceback.format_exc())
-        # Retourne toujours une clé 'response' même en cas d'erreur
+        
+        # Retourne toujours une réponse structurée même en cas d'erreur
         return {
-            "response": f"Erreur lors du traitement: {str(e)}",
+            "message": f"Erreur lors du traitement: {str(e)}",
             "agent_used": "task_divider",
             "confidence": 0.0,
             "sources": []

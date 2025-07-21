@@ -64,14 +64,32 @@ class BaseAgent(ABC):
             # Préparation du contexte
             context = self._prepare_context(state)
             
-            # Exécution de l'agent
-            result = await self.executor.ainvoke({
-                "input": state.current_message,
-                "context": context
-            })
-            
-            # Traitement du résultat
-            return self._process_result(result, state)
+            # Exécution de l'agent avec gestion des erreurs de parsing
+            try:
+                result = await self.executor.ainvoke({
+                    "input": state.current_message,
+                    "context": context
+                })
+                
+                # Traitement du résultat
+                return self._process_result(result, state)
+                
+            except Exception as parsing_error:
+                # En cas d'erreur de parsing, on utilise une approche directe
+                logger.warning(f"Erreur de parsing dans l'agent {self.agent_type}, utilisation de l'approche directe: {parsing_error}")
+                
+                # Appel direct au LLM sans parser
+                llm = self.gemini_service.get_llm()
+                prompt = self._get_system_prompt() + f"\n\nQuestion de l'utilisateur: {state.current_message}\n\nRéponds directement à la question en français de manière claire et détaillée."
+                
+                direct_response = await llm.ainvoke(prompt)
+                
+                return {
+                    "response": direct_response.content if hasattr(direct_response, 'content') else str(direct_response),
+                    "confidence": 0.7,  # Confiance réduite car pas d'outils utilisés
+                    "sources": [],
+                    "agent_used": self.agent_type
+                }
             
         except Exception as e:
             logger.error(f"Erreur lors du traitement par l'agent {self.agent_type}: {e}")

@@ -1,7 +1,7 @@
 import { ChatMessageType, ModalList, useSettings } from "../store/store";
 
-const apiUrl = "https://api.openai.com/v1/chat/completions";
-const IMAGE_GENERATION_API_URL = "https://api.openai.com/v1/images/generations";
+const apiUrl = "http://0.0.0.0:8000";
+const IMAGE_GENERATION_API_URL = "http://0.0.0.0:8000";
 
 export async function fetchResults(
   messages: Omit<ChatMessageType, "id" | "type">[],
@@ -64,7 +64,7 @@ export async function fetchResults(
 
 export async function fetchModals() {
   try {
-    const response = await fetch("https://api.openai.com/v1/models", {
+    const response = await fetch("http://0.0.0.0:8000", {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("apikey")}`,
       },
@@ -123,4 +123,77 @@ export async function generateImage(
   });
   const body: IMAGE_RESPONSE = await response.json();
   return body;
+}
+
+// src/services/chatService.ts
+
+// Envoie une question à l'API SMA
+export async function askSMA(question: string, context: any = {}) {
+  const response = await fetch("http://localhost:8000/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: question,
+      context: context
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Erreur SMA");
+  }
+  return await response.json();
+}
+
+// Upload un document via l'API SMA
+export async function uploadDocument(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("http://localhost:8000/upload-document", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Erreur upload document");
+  }
+  return await response.json();
+}
+
+// Simulation énergétique via l'API SMA
+export async function simulateEnergy(simulationParams: any) {
+  const response = await fetch("http://localhost:8000/simulate-energy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(simulationParams),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Erreur simulation");
+  }
+  return await response.json();
+}
+
+// Liste les documents indexés via l'API SMA
+export async function listDocuments() {
+  const response = await fetch("http://localhost:8000/documents", {
+    method: "GET",
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Erreur listing documents");
+  }
+  return await response.json();
+}
+
+// Supprime un document via l'API SMA
+export async function deleteDocument(documentId: string) {
+  const response = await fetch(`http://localhost:8000/documents/${documentId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Erreur suppression document");
+  }
+  return await response.json();
 }

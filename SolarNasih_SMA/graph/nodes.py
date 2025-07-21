@@ -52,25 +52,54 @@ async def task_division_node(state: SolarNasihState) -> SolarNasihState:
         agents_map = workflow.agents
         agent = agents_map.get(AgentType.TASK_DIVIDER)
         if agent:
-            result = await agent.process(state, agents_map)
+            # Conversion de l'état en AgentState
+            from models.schemas import AgentState
+            agent_state = AgentState(
+                current_message=state["current_message"],
+                detected_language=state["detected_language"],
+                user_intent=state["user_intent"],
+                agent_route=AgentType.TASK_DIVIDER,
+                context=state["user_context"],
+                response="",
+                confidence=0.0,
+                sources=[],
+                processing_history=state["conversation_history"]
+            )
+            
+            # Appel correct avec les deux paramètres
+            result = await agent.process(agent_state, agents_map)
+            
             # Protection : s'assurer que result est un dict avec 'response' string
             if not isinstance(result, dict) or 'response' not in result or not isinstance(result['response'], str):
                 result = {
-                    'response': 'Solar Nasih : Je n’ai pas pu traiter votre demande, mais je reste à votre disposition pour toute question sur l’énergie solaire.',
+                    'response': 'Solar Nasih : Je n\'ai pas pu traiter votre demande, mais je reste à votre disposition pour toute question sur l\'énergie solaire.',
                     'confidence': 0.2,
                     'sources': ['Fallback TaskDivider']
                 }
-            state = update_state_with_agent_result(state, state.get('agent_route', AgentType.TASK_DIVIDER), result)
+            
+            # Mise à jour de l'état avec le résultat
+            state = update_state_with_agent_result(state, AgentType.TASK_DIVIDER, result)
+            
+            # S'assurer que la réponse est bien définie
+            if not state.get("response") or not state["response"].strip():
+                state["response"] = result.get("response", "Aucune réponse générée")
+            
+            # IMPORTANT: Ne pas modifier agent_route ici, laisser le workflow décider
+            # Le TaskDividerAgent va gérer le routage interne
+                
         else:
             state['response'] = "Erreur : agent de division des tâches non disponible."
     except Exception as e:
         state['response'] = f"Erreur dans le node de division des tâches : {str(e)}"
-    # Protection finale : forcer response et agent_route à être des strings
+    
+    # Protection finale : forcer response à être une string valide
     if not isinstance(state.get('response', ''), str):
         state['response'] = str(state.get('response', ''))
-    if 'agent_route' in state and hasattr(state['agent_route'], 'value'):
-        state['agent_route'] = state['agent_route'].value
-    logger.info(f"[TaskDividerNode] response: {state['response']} | agent_route: {state.get('agent_route')}")
+    
+    # NE PAS modifier agent_route ici - laisser le TaskDividerAgent gérer le routage
+    # state['agent_route'] reste AgentType.TASK_DIVIDER pour ce nœud
+    
+    logger.info(f"[TaskDividerNode] response: {state['response'][:100]}... | agent_route: {state.get('agent_route')}")
     return state
 
 async def rag_processing_node(state: SolarNasihState) -> SolarNasihState:
@@ -462,10 +491,17 @@ async def response_formatting_node(state: SolarNasihState) -> SolarNasihState:
                 state["response"] += f"\n\nSources: {', '.join(state['sources'][:3])}"
             # Ajout de la signature
             state["response"] += "\n\n---\nSolar Nasih - Votre assistant en énergie solaire"
+        
         # Logging des étapes de traitement
         state["processing_steps"].append("Response formatting completed")
+        
         # Ajout à l'historique de conversation
-        agent_route_val = state["agent_route"].value if hasattr(state["agent_route"], "value") else state["agent_route"]
+        agent_route = state.get("agent_route", AgentType.TASK_DIVIDER)
+        if isinstance(agent_route, AgentType):
+            agent_route_val = agent_route.value
+        else:
+            agent_route_val = str(agent_route)
+            
         state["conversation_history"].append({
             "user_message": state["current_message"],
             "assistant_response": state["response"],
