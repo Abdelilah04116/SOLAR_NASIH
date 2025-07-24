@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,7 +48,7 @@ app = FastAPI(
 # Configuration CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # adapte selon le port React
+    allow_origins=["*"],  # En production, spécifier les domaines autorisés
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

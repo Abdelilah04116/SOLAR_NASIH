@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from "react";
 import useChat from "../../store/store";
 import { createMessage } from "../../utils/createMessage";
 import axios from "axios";
+import { sendChatMessage } from "../../services/smaApi"; // Ajoute l'import correct
 
 export default function UserQuery() {
   const [query, setQuery] = useState("");
@@ -90,8 +91,9 @@ export default function UserQuery() {
     if (query) {
       addChat(createMessage("user", query, "text"));
       try {
-        const res = await askSMA(query);
-        addChat(createMessage("assistant", res.message || res.response || "Aucune réponse reçue.", "text"));
+        // Utilise sendChatMessage au lieu de askSMA
+        const res = await sendChatMessage(query);
+        addChat(createMessage("assistant", res.answer || res.message || "Aucune réponse reçue.", "text"));
       } catch (err: any) {
         addChat(createMessage("assistant", "Erreur SMA : " + (err.message || "Erreur inconnue"), "text"));
       }

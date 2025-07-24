@@ -37,8 +37,8 @@ class RAGService:
         """
         
         try:
+            logger.info(f"[SMA→RAG] Envoi requête au RAG: {query[:80]}...")
             async with httpx.AsyncClient() as client:
-                # Appel à l'endpoint RAG correct /search/
                 response = await client.post(
                     f"{self.base_url}/search/",
                     json={
@@ -49,21 +49,21 @@ class RAGService:
                     },
                     timeout=30.0
                 )
-                
+                logger.info(f"[SMA→RAG] Statut HTTP RAG: {response.status_code}")
                 if response.status_code == 200:
                     rag_data = response.json()
-                    logger.info(f"Réponse brute RAG: {rag_data}")
+                    logger.info(f"[SMA→RAG] Réponse brute RAG: {rag_data}")
                     generated = rag_data.get("generated_response", {})
                     results = rag_data.get("results", [])
-                    # Si pas de réponse générée ou pas de résultats, fallback SMA
                     if not generated or not results:
-                        logger.info("RAG n'a pas généré de réponse pertinente, fallback SMA activé.")
+                        logger.info("[SMA→RAG] RAG n'a pas généré de réponse pertinente, fallback SMA activé.")
                         return self._fallback_response(query)
                     answer = generated.get("response", "") if isinstance(generated, dict) else ""
                     confidence = generated.get("confidence", 0.8) if isinstance(generated, dict) else 0.8
                     sources = [r.get("source", "") for r in results if isinstance(r, dict)]
                     similarity_score = results[0].get("score", 0.0) if results and isinstance(results, list) else 0.0
                     total_results = rag_data.get("total_results", 0)
+                    logger.info(f"[SMA→RAG] Réponse traitée SMA: {answer[:80]}...")
                     return {
                         "answer": answer,
                         "confidence": confidence,
@@ -72,13 +72,13 @@ class RAGService:
                         "total_results": total_results
                     }
                 else:
-                    logger.error(f"Erreur RAG: {response.status_code} - {response.text}")
+                    logger.error(f"[SMA→RAG] Erreur RAG: {response.status_code} - {response.text}")
                     return self._fallback_response(query)
         except httpx.RequestError as e:
-            logger.error(f"Erreur de connexion RAG: {e}")
+            logger.error(f"[SMA→RAG] Erreur de connexion RAG: {e}")
             return self._fallback_response(query)
         except Exception as e:
-            logger.error(f"Erreur lors de la requête RAG: {e}")
+            logger.error(f"[SMA→RAG] Erreur lors de la requête RAG: {e}")
             return self._fallback_response(query)
     
     async def index_document(self, file: UploadFile) -> str:
