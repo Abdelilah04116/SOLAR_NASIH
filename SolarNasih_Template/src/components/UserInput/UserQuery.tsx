@@ -4,7 +4,7 @@ import { sendOutline, send, cloudUploadOutline, documentOutline, micOutline } fr
 import { useRef, useState, useEffect } from "react";
 import useChat from "../../store/store";
 import { createMessage } from "../../utils/createMessage";
-import { askSMA } from "../../services/chatService";
+import axios from "axios";
 
 export default function UserQuery() {
   const [query, setQuery] = useState("");

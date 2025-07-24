@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +18,7 @@ from services.voice_service import VoiceService
 from utils.validators import validate_api_keys, sanitize_user_input
 from config.settings import settings
 from agents.multilingual_detector import MultilingualDetectorAgent
+from httpx import AsyncClient
 
 # Configuration du logging
 logging.basicConfig(
@@ -47,7 +48,7 @@ app = FastAPI(
 # Configuration CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, spécifier les domaines autorisés
+    allow_origins=["http://localhost:3000"],  # adapte selon le port React
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -489,6 +490,23 @@ async def cleanup_temp_files(file_path: str):
             logger.info(f"🗑️ Fichier temporaire supprimé: {file_path}")
     except Exception as e:
         logger.warning(f"⚠️ Impossible de supprimer {file_path}: {e}")
+
+async def query_rag_service(query: str, method: str = "hybrid", top_k: int = 5):
+    """Appelle l'API RAG pour une requête de recherche."""
+    async with AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8001/search/",
+            json={"query": query, "method": method, "top_k": top_k}
+        )
+        response.raise_for_status()
+        return response.json()
+
+@app.post("/query")
+async def query_endpoint(request: ChatRequest):
+    """Orchestre la requête SMA -> RAG et retourne la réponse à l'utilisateur."""
+    rag_response = await query_rag_service(request.message)
+    # Ici, tu peux enrichir la réponse ou la traiter via des agents SMA si besoin
+    return rag_response
 
 if __name__ == "__main__":
     # Configuration selon l'environnement

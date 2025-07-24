@@ -52,23 +52,31 @@ class RAGService:
                 
                 if response.status_code == 200:
                     rag_data = response.json()
-                    
-                    # Transformation de la réponse pour correspondre au format attendu
+                    logger.info(f"Réponse brute RAG: {rag_data}")
+                    generated = rag_data.get("generated_response", {})
+                    results = rag_data.get("results", [])
+                    # Si pas de réponse générée ou pas de résultats, fallback SMA
+                    if not generated or not results:
+                        logger.info("RAG n'a pas généré de réponse pertinente, fallback SMA activé.")
+                        return self._fallback_response(query)
+                    answer = generated.get("response", "") if isinstance(generated, dict) else ""
+                    confidence = generated.get("confidence", 0.8) if isinstance(generated, dict) else 0.8
+                    sources = [r.get("source", "") for r in results if isinstance(r, dict)]
+                    similarity_score = results[0].get("score", 0.0) if results and isinstance(results, list) else 0.0
+                    total_results = rag_data.get("total_results", 0)
                     return {
-                        "answer": rag_data.get("generated_response", {}).get("response", ""),
-                        "confidence": rag_data.get("generated_response", {}).get("confidence", 0.8),
-                        "sources": [result.get("source", "") for result in rag_data.get("results", [])],
-                        "similarity_score": rag_data.get("results", [{}])[0].get("score", 0.0) if rag_data.get("results") else 0.0,
-                        "total_results": rag_data.get("total_results", 0)
+                        "answer": answer,
+                        "confidence": confidence,
+                        "sources": sources,
+                        "similarity_score": similarity_score,
+                        "total_results": total_results
                     }
                 else:
                     logger.error(f"Erreur RAG: {response.status_code} - {response.text}")
                     return self._fallback_response(query)
-                    
         except httpx.RequestError as e:
             logger.error(f"Erreur de connexion RAG: {e}")
             return self._fallback_response(query)
-        
         except Exception as e:
             logger.error(f"Erreur lors de la requête RAG: {e}")
             return self._fallback_response(query)
