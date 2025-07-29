@@ -256,13 +256,24 @@ async def upload_document(
     """
     try:
         logger.info(f"📄 Upload document: {file.filename}")
+        logger.info(f"📋 Content-Type: {file.content_type}")
         
         # Validation du fichier
         from utils.validators import validate_file_upload
-        validation = validate_file_upload(file.filename, file.content_type, 0)  # Size vérifiée côté FastAPI
+        # Lire le contenu pour obtenir la taille réelle
+        content = await file.read()
+        file_size = len(content)
+        # Remettre le curseur au début pour que le service RAG puisse lire le fichier
+        await file.seek(0)
+        
+        logger.info(f"📏 Taille fichier: {file_size} bytes")
+        validation = validate_file_upload(file.filename, file.content_type, file_size)
         
         if not validation['valid']:
+            logger.error(f"❌ Validation échouée pour {file.filename}: {validation['errors']}")
             raise HTTPException(status_code=400, detail=f"Fichier invalide: {validation['errors']}")
+        
+        logger.info(f"✅ Validation réussie pour {file.filename} (taille: {file_size} bytes)")
         
         # Appel au service RAG existant
         result = await rag_service_dep.index_document(file)

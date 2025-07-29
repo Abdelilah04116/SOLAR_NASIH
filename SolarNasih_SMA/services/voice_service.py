@@ -6,6 +6,8 @@ import os
 from io import BytesIO
 from fastapi import UploadFile
 import logging
+import subprocess
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -50,39 +52,108 @@ class VoiceService:
             # Lecture du fichier audio
             audio_data = await audio_file.read()
             
-            # Sauvegarde temporaire
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+            # Déterminer l'extension basée sur le nom du fichier
+            filename = audio_file.filename or "audio"
+            if filename.endswith('.webm'):
+                suffix = '.webm'
+            elif filename.endswith('.wav'):
+                suffix = '.wav'
+            elif filename.endswith('.mp3'):
+                suffix = '.mp3'
+            else:
+                suffix = '.webm'  # Par défaut
+            
+            # Sauvegarde temporaire avec la bonne extension
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
                 temp_file.write(audio_data)
                 temp_file_path = temp_file.name
             
+            logger.info(f"📁 Fichier audio temporaire créé: {temp_file_path}")
+            logger.info(f"📏 Taille du fichier: {len(audio_data)} bytes")
+            
             try:
+                # Vérifier si le fichier est supporté par speech_recognition
+                if suffix == '.webm':
+                    logger.warning("⚠️ Format WebM détecté - tentative de conversion...")
+                    
+                    # Essayer d'abord avec ffmpeg si disponible (global ou local)
+                    ffmpeg_path = shutil.which('ffmpeg') or 'ffmpeg.exe'
+                    if os.path.exists(ffmpeg_path) or shutil.which('ffmpeg') is not None:
+                        wav_file_path = temp_file_path.replace('.webm', '.wav')
+                        try:
+                            # Conversion WebM vers WAV
+                            cmd = [
+                                ffmpeg_path, '-i', temp_file_path,
+                                '-acodec', 'pcm_s16le',
+                                '-ar', '16000',
+                                '-ac', '1',
+                                wav_file_path,
+                                '-y'  # Écraser le fichier s'il existe
+                            ]
+                            
+                            result = subprocess.run(cmd, capture_output=True, text=True)
+                            
+                            if result.returncode == 0:
+                                logger.info(f"✅ Conversion WebM vers WAV réussie: {wav_file_path}")
+                                temp_file_path = wav_file_path  # Utiliser le fichier WAV converti
+                            else:
+                                logger.error(f"❌ Erreur conversion ffmpeg: {result.stderr}")
+                                raise Exception(f"Conversion échouée: {result.stderr}")
+                                
+                        except Exception as conv_error:
+                            logger.error(f"❌ Erreur lors de la conversion: {conv_error}")
+                            # Continuer avec le fichier WebM original
+                            pass
+                    else:
+                        logger.warning("⚠️ ffmpeg non disponible - tentative avec le fichier WebM original")
+                        # Pour l'instant, retourner un message d'aide
+                        return {
+                            'transcribed_text': "Pour une meilleure reconnaissance vocale, veuillez installer ffmpeg ou utiliser un navigateur qui enregistre en WAV.",
+                            'confidence': 0.0,
+                            'detected_language': language,
+                            'duration_seconds': 0,
+                            'success': False,
+                            'error': 'ffmpeg non disponible',
+                            'help': 'Installez ffmpeg ou utilisez un navigateur compatible WAV'
+                        }
+                
                 # Transcription avec speech_recognition
+                logger.info(f"🎵 Ouverture du fichier audio: {temp_file_path}")
                 with sr.AudioFile(temp_file_path) as source:
+                    logger.info(f"📊 Propriétés audio: {source.DURATION}s, {source.SAMPLE_RATE}Hz, {source.SAMPLE_WIDTH} bytes")
+                    
                     # Ajustement du bruit ambiant
                     self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                     
                     # Enregistrement de l'audio
                     audio = self.recognizer.record(source)
+                    logger.info(f"🎤 Audio enregistré pour transcription")
                 
                 # Transcription
                 lang_code = self.supported_languages.get(language, 'fr-FR')
                 
                 try:
+                    logger.info(f"🎤 Tentative de transcription avec Google Speech (langue: {lang_code})")
                     # Essai avec Google Speech Recognition
                     text = self.recognizer.recognize_google(audio, language=lang_code)
                     confidence = 0.8  # Google ne retourne pas de score de confiance
+                    logger.info(f"✅ Transcription Google réussie: '{text}'")
                     
-                except sr.UnknownValueError:
+                except sr.UnknownValueError as e:
+                    logger.warning(f"⚠️ Google Speech n'a pas reconnu l'audio: {e}")
                     # Essai avec reconnaissance offline si disponible
                     try:
+                        logger.info("🔄 Tentative avec Sphinx (reconnaissance offline)")
                         text = self.recognizer.recognize_sphinx(audio)
                         confidence = 0.6
-                    except:
+                        logger.info(f"✅ Transcription Sphinx réussie: '{text}'")
+                    except Exception as sphinx_error:
+                        logger.error(f"❌ Sphinx a aussi échoué: {sphinx_error}")
                         text = ""
                         confidence = 0.0
                 
                 except sr.RequestError as e:
-                    logger.error(f"Erreur API Google Speech: {e}")
+                    logger.error(f"❌ Erreur API Google Speech: {e}")
                     text = ""
                     confidence = 0.0
                 
@@ -95,9 +166,14 @@ class VoiceService:
                 }
                 
             finally:
-                # Nettoyage du fichier temporaire
+                # Nettoyage des fichiers temporaires
                 if os.path.exists(temp_file_path):
                     os.unlink(temp_file_path)
+                
+                # Nettoyer aussi le fichier WAV converti s'il existe
+                if suffix == '.webm' and 'wav_file_path' in locals():
+                    if os.path.exists(wav_file_path):
+                        os.unlink(wav_file_path)
                     
         except Exception as e:
             logger.error(f"Erreur lors de la transcription: {e}")

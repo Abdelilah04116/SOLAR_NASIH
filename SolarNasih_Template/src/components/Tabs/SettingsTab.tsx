@@ -73,16 +73,21 @@ export default function SettingsTab({ visible }: { visible: boolean }) {
     >
       <div className="p-2">
         <div className="flex items-center mb-4 justify-between border border-gray-200 rounded dark:border-gray-700 p-2">
-          <label
-            htmlFor="default-checkbox"
-            className="ml-2 font-bold dark:text-gray-300"
-          >
-            Dark mode
-          </label>
+          <div className="flex items-center">
+            <label
+              htmlFor="theme-toggle"
+              className="ml-2 font-bold dark:text-gray-300 text-gray-700"
+            >
+              {theme === "dark" ? "Mode Sombre" : "Mode Clair"}
+            </label>
+            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+              {theme === "dark" ? "🌙" : "☀️"}
+            </span>
+          </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              value=""
+              id="theme-toggle"
               checked={theme === "dark"}
               onChange={() => setTheme(theme === "dark" ? "light" : "dark")}
               className="sr-only peer"

@@ -117,22 +117,38 @@ def validate_file_upload(filename: str, content_type: str, file_size: int) -> Di
         result['errors'].append('File too large (max 10MB)')
     
     # Check file extension
-    allowed_extensions = ['.pdf', '.docx', '.txt', '.md', '.xlsx']
+    allowed_extensions = ['.pdf', '.docx', '.txt', '.md', '.xlsx', '.json', '.csv', '.xml', '.html', '.htm']
     if not any(filename.lower().endswith(ext) for ext in allowed_extensions):
         result['valid'] = False
-        result['errors'].append('File type not allowed')
+        result['errors'].append(f'File type not allowed: {filename}')
     
-    # Check content type
+    # Check content type (plus permissif)
     allowed_types = [
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'text/plain',
         'text/markdown',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv',
+        'application/msword',
+        'application/vnd.ms-excel',
+        'application/json',
+        'text/html',
+        'text/xml',
+        'application/xml',
+        'application/octet-stream'  # Pour les fichiers binaires génériques
     ]
+    
+    # Si le content_type n'est pas dans la liste, on vérifie l'extension
     if content_type not in allowed_types:
-        result['valid'] = False
-        result['errors'].append('Content type not allowed')
+        # Vérifier si c'est un type de texte générique ou JSON
+        if (not content_type.startswith('text/') and 
+            not content_type.startswith('application/json') and 
+            content_type != 'application/octet-stream'):
+            result['valid'] = False
+            result['errors'].append(f'Content type not allowed: {content_type}')
+        else:
+            logger.info(f"✅ Content type accepté: {content_type}")
     
     return result
 

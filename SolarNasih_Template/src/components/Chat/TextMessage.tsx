@@ -34,8 +34,8 @@ export default function TextMessage({ index, chat }: Props) {
         ) : (
           <div
             className={classNames(
-              "  animate-preulse overflow-x-hidden whitespace-pre-wrap",
-              { "text-red-500": error, "dark:text-gray-300": !error }
+              "animate-preulse overflow-x-hidden whitespace-pre-wrap",
+              { "text-red-500": error, "text-gray-700 dark:text-gray-300": !error }
             )}
           >
             <Markdown

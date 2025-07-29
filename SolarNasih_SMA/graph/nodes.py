@@ -448,27 +448,29 @@ async def voice_processing_node(state: SolarNasihState) -> SolarNasihState:
         if not audio_file:
             raise ValueError("Aucun fichier audio fourni")
         
-        # Simulation du traitement vocal
-        # En production, utiliser speech_recognition et gTTS
-        transcribed_text = "Simulation: Combien coûte une installation photovoltaïque ?"
+        # Utilisation du vrai service de transcription
+        from services.voice_service import VoiceService
+        voice_service = VoiceService()
+        
+        # Transcription de l'audio
+        transcription_result = await voice_service.transcribe_audio(audio_file, language='fr')
+        
+        transcribed_text = transcription_result.get('transcribed_text', '')
+        confidence = transcription_result.get('confidence', 0.0)
+        
+        if not transcribed_text:
+            transcribed_text = "Texte non reconnu"
+            confidence = 0.0
         
         # Mise à jour du message avec le texte transcrit
         state["current_message"] = transcribed_text
         
-        # Génération de réponse vocale
-        from services.gemini_service import GeminiService
-        gemini_service = GeminiService()
-        
-        response = await gemini_service.generate_response(
-            f"Réponds de manière concise à cette question vocale: {transcribed_text}"
-        )
-        
         result = {
-            "response": response,
-            "confidence": 0.8,
-            "sources": ["Traitement vocal"],
-            "transcribed_text": transcribed_text,
-            "audio_response_url": "/audio/response.mp3"  # Simulation
+            "transcription": transcribed_text,
+            "confidence": confidence,
+            "detected_language": transcription_result.get('detected_language', 'fr'),
+            "duration_seconds": transcription_result.get('duration_seconds', 0),
+            "success": transcription_result.get('success', False)
         }
         
         state = update_state_with_agent_result(state, AgentType.VOICE_PROCESSOR, result)

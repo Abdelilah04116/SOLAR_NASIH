@@ -293,7 +293,7 @@ class SolarNasihWorkflow:
             if not response and state.get("errors"):
                 response = f"Erreur lors du traitement: {', '.join(state['errors'])}"
             
-            return {
+            result = {
                 "response": response,
                 "agent_used": agent_route_val,
                 "confidence": state.get("confidence_score", 0.0),
@@ -304,6 +304,21 @@ class SolarNasihWorkflow:
                 "errors": state.get("errors", []),
                 "debug_info": state.get("debug_info", {})
             }
+            
+            # Ajouter les données de transcription si disponibles
+            if state.get("agent_route") == AgentType.VOICE_PROCESSOR:
+                agent_results = state.get("agent_results", {})
+                voice_result = agent_results.get(AgentType.VOICE_PROCESSOR, {})
+                if voice_result:
+                    result.update({
+                        "transcription": voice_result.get("transcription", ""),
+                        "transcribed_text": voice_result.get("transcription", ""),
+                        "voice_confidence": voice_result.get("confidence", 0.0),
+                        "duration_seconds": voice_result.get("duration_seconds", 0),
+                        "voice_success": voice_result.get("success", False)
+                    })
+            
+            return result
         except Exception as e:
             logger.error(f"Erreur dans _format_final_result: {e}")
             return {

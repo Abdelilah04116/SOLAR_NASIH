@@ -42,7 +42,7 @@ export default function UserMessage({ chat, chatIndex }: Props) {
           {!edit ? (
             <p
               className={classNames(
-                " dark:text-gray-200 overflow-x-auto"
+                "text-gray-800 dark:text-gray-200 overflow-x-auto"
               )}
             >
               {chat.content}

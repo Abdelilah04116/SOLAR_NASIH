@@ -314,7 +314,7 @@ const useSettings = createWithEqualityFn<SettingsType>()(
 const useTheme = create<ThemeType>()(
   persist(
     (set) => ({
-      theme: "dark",
+      theme: "light", // Mode clair par défaut
       setTheme: (theme) => {
         set(
           produce((state) => {
@@ -325,6 +325,14 @@ const useTheme = create<ThemeType>()(
     }),
     {
       name: "theme",
+      // Migration pour forcer le mode clair pour les utilisateurs existants
+      migrate: (persistedState: any, version: number) => {
+        if (persistedState && persistedState.theme === "dark") {
+          // Forcer le mode clair pour les utilisateurs existants
+          return { theme: "light" };
+        }
+        return persistedState;
+      },
     }
   )
 );

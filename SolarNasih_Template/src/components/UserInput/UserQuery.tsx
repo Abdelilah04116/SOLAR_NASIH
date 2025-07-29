@@ -1,6 +1,6 @@
 import { IonIcon } from "@ionic/react";
 import classNames from "classnames";
-import { sendOutline, send, cloudUploadOutline, documentOutline, micOutline } from "ionicons/icons";
+import { sendOutline, send, cloudUploadOutline, documentOutline, micOutline, mic, closeOutline, checkmarkOutline } from "ionicons/icons";
 import { useRef, useState, useEffect } from "react";
 import useChat from "../../store/store";
 import { createMessage } from "../../utils/createMessage";
@@ -17,9 +17,16 @@ export default function UserQuery() {
   const [recordingTime, setRecordingTime] = useState(0); // secondes
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  
+  // États pour les alertes personnalisées
+  const [showMicrophoneAlert, setShowMicrophoneAlert] = useState(false);
+  const [showRecordingStarted, setShowRecordingStarted] = useState(false);
+  const [showRecordingStopped, setShowRecordingStopped] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (isRecording) {
@@ -87,27 +94,65 @@ export default function UserQuery() {
       return;
     }
     
-    // Envoi texte SMA
-    if (query) {
-      addChat(createMessage("user", query, "text"));
+    // Traitement combiné : fichiers + texte
+    if (importedFiles.length > 0 || query) {
+      // Construire le message utilisateur combiné
+      let userMessage = "";
+      if (query) {
+        userMessage += query;
+      }
+      if (importedFiles.length > 0) {
+        if (userMessage) userMessage += "\n\n";
+        userMessage += `Documents joints : ${importedFiles.map(f => f.name).join(", ")}`;
+      }
+      
+      // Ajouter le message utilisateur
+      addChat(createMessage("user", userMessage, "text"));
+      
       try {
-        // Utilise sendChatMessage au lieu de askSMA
-        const res = await sendChatMessage(query);
+        // Upload des fichiers d'abord si présents
+        if (importedFiles.length > 0) {
+          addChat(createMessage("assistant", "📄 Indexation des documents par l'agent spécialisé...", "text"));
+          
+          for (const file of importedFiles) {
+            try {
+              console.log('🚀 Upload document:', file.name);
+              const formData = new FormData();
+              formData.append('file', file);
+              
+              const response = await fetch('http://localhost:8000/upload-document', {
+                method: 'POST',
+                body: formData,
+              });
+              
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Erreur upload:', response.status, errorText);
+                addChat(createMessage("assistant", `❌ Erreur lors de l'indexation de "${file.name}": ${response.status}`, "text"));
+              } else {
+                const result = await response.json();
+                console.log('✅ Document indexé:', result);
+                addChat(createMessage("assistant", `✅ Document "${file.name}" indexé avec succès par l'agent spécialisé.`, "text"));
+              }
+            } catch (error) {
+              console.error('❌ Erreur upload document:', error);
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              addChat(createMessage("assistant", `❌ Erreur lors de l'indexation de "${file.name}": ${errorMessage}`, "text"));
+            }
+          }
+        }
+        
+        // Envoyer le message avec contexte des documents
+        const messageToSend = query || "Analysez les documents joints";
+        const res = await sendChatMessage(messageToSend);
         addChat(createMessage("assistant", res.answer || res.message || "Aucune réponse reçue.", "text"));
+        
       } catch (err: any) {
         addChat(createMessage("assistant", "Erreur SMA : " + (err.message || "Erreur inconnue"), "text"));
       }
+      
+      // Nettoyer l'interface
       setQuery("");
-      if (textareaRef.current) textareaRef.current.style.height = "30px";
-      return;
-    }
-
-    // Gestion de l'envoi de fichiers
-    if (importedFiles.length > 0) {
-      importedFiles.forEach((file) => {
-        addChat(createMessage("user", file.name, "document"));
-      });
-      addChat(createMessage("assistant", "Processing your documents message ....", "text"));
       setImportedFiles([]);
       if (textareaRef.current) textareaRef.current.style.height = "30px";
     }
@@ -126,31 +171,8 @@ export default function UserQuery() {
 
   function handleVoiceClick() {
     if (!isRecording) {
-      const permission = window.confirm("Voulez-vous ouvrir le micro pour enregistrer un audio ?");
-      if (!permission) return;
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          streamRef.current = stream;
-          const mediaRecorder = new MediaRecorder(stream);
-          mediaRecorderRef.current = mediaRecorder;
-          audioChunksRef.current = [];
-          mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              audioChunksRef.current.push(event.data);
-            }
-          };
-          mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            audioBlobRef.current = audioBlob;
-            alert("Enregistrement arrêté.");
-          };
-          mediaRecorder.start();
-          setIsRecording(true);
-          alert("Enregistrement démarré ! Parlez...");
-        })
-        .catch((err) => {
-          alert("Impossible d'accéder au micro : " + err.message);
-        });
+      // Afficher l'alerte personnalisée pour demander la permission
+      setShowMicrophoneAlert(true);
     } else {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
@@ -161,6 +183,42 @@ export default function UserQuery() {
         }
       }
     }
+  }
+
+  function startRecording() {
+    setShowMicrophoneAlert(false);
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => {
+        streamRef.current = stream;
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+        
+                  mediaRecorder.onstop = () => {
+            // Essayer d'enregistrer en WAV, sinon utiliser WebM
+            const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm';
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+            audioBlobRef.current = audioBlob;
+            setShowRecordingStopped(true);
+            setTimeout(() => setShowRecordingStopped(false), 3000);
+          };
+        
+        mediaRecorder.start();
+        setIsRecording(true);
+        setShowRecordingStarted(true);
+        setTimeout(() => setShowRecordingStarted(false), 3000);
+      })
+      .catch((err) => {
+        setErrorMessage("Impossible d'accéder au micro : " + err.message);
+        setShowError(true);
+        setTimeout(() => setShowError(false), 5000);
+      });
   }
 
   function stopRecordingAndSend() {
@@ -176,37 +234,120 @@ export default function UserQuery() {
 
   async function sendAudioToBackend(audioBlob: Blob) {
     try {
+      // Afficher un message de traitement
+      addChat(createMessage("assistant", "🎤 Traitement de votre message vocal par l'agent spécialisé...", "text"));
+      
       // Créer un FormData pour envoyer l'audio
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('audio_file', audioBlob, 'recording.webm');
       
-      // Envoyer au backend pour conversion audio vers texte
-      const response = await fetch('/api/process-audio', {
+      // Envoyer au backend SMA pour traitement par l'agent audio
+      const response = await fetch('http://localhost:8000/voice-chat', {
         method: 'POST',
         body: formData,
       });
       
       if (response.ok) {
         const result = await response.json();
-        // Le backend renvoie le texte transcrit de l'audio
-        const transcribedText = result.text || result.transcription || "Texte non reconnu";
+        console.log('✅ Réponse agent audio:', result);
+        console.log('🔍 Clés disponibles:', Object.keys(result));
         
-        // Ajouter le texte transcrit comme un message utilisateur normal
-        addChat(createMessage("user", transcribedText, "text"));
+        // Extraire le texte transcrit de la réponse (gérer plusieurs clés possibles)
+        const transcribedText = result.transcription || result.transcribed_text || result.text || result.message || "Texte non reconnu";
+        console.log('📝 Texte transcrit extrait:', transcribedText);
         
-        // Ajouter une réponse d'assistant (optionnel)
-        addChat(createMessage("assistant", "Traitement de votre message vocal...", "text"));
+        // Placer le texte transcrit dans le champ de saisie
+        setQuery(transcribedText);
+        
+        // Ajuster la hauteur du textarea
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "0px";
+          textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        }
+        
+        // Mettre le focus sur le textarea
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+        
+        // Confirmation de succès
+        addChat(createMessage("assistant", "✅ Message vocal converti en texte et placé dans le champ de saisie.", "text"));
+        
       } else {
-        throw new Error('Erreur lors du traitement audio');
+        const errorText = await response.text();
+        console.error('❌ Erreur agent audio:', response.status, errorText);
+        throw new Error(`Erreur agent audio: ${response.status} - ${errorText}`);
       }
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la conversion audio vers texte');
+      console.error('❌ Erreur lors du traitement audio:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      addChat(createMessage("assistant", `❌ Erreur lors de la conversion audio : ${errorMessage}`, "text"));
     }
   }
 
   return (
     <div>
+      {/* Alertes personnalisées */}
+      {showMicrophoneAlert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all animate-scaleIn">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                <IonIcon icon={mic} className="text-3xl text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
+              Activer le microphone
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 text-center mb-6">
+              Voulez-vous autoriser l'accès au microphone pour enregistrer un message vocal ?
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowMicrophoneAlert(false)}
+                className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={startRecording}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
+              >
+                <IonIcon icon={checkmarkOutline} className="mr-2" />
+                Autoriser
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRecordingStarted && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-white rounded-full mr-3 animate-pulse"></div>
+            <span className="font-medium">Enregistrement démarré ! Parlez...</span>
+          </div>
+        </div>
+      )}
+
+      {showRecordingStopped && (
+        <div className="fixed top-4 right-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
+          <div className="flex items-center">
+            <IonIcon icon={checkmarkOutline} className="mr-2" />
+            <span className="font-medium">Enregistrement terminé</span>
+          </div>
+        </div>
+      )}
+
+      {showError && (
+        <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
+          <div className="flex items-center">
+            <IonIcon icon={closeOutline} className="mr-2" />
+            <span className="font-medium">{errorMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Display imported files above the chat */}
       <div className="mb-4">
         {importedFiles.map((file, index) => (
@@ -254,15 +395,18 @@ export default function UserQuery() {
           <button
             type="button"
             className={classNames(
-              "text-center text-gray-600 dark:text-white transition inline-flex items-center justify-center py-2 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700",
-              { "recording-pulse": isRecording }
+              "text-center transition inline-flex items-center justify-center py-2 px-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700",
+              { 
+                "recording-pulse text-red-600 dark:text-red-400": isRecording,
+                "text-gray-600 dark:text-white": !isRecording
+              }
             )}
             onClick={handleVoiceClick}
           >
-            <IonIcon icon={micOutline} />
+            <IonIcon icon={isRecording ? mic : micOutline} />
           </button>
           {isRecording && (
-            <span className="text-xs text-red-600 font-bold mt-1">
+            <span className="text-xs text-red-600 dark:text-red-400 font-bold mt-1 animate-pulse">
               {Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}
             </span>
           )}

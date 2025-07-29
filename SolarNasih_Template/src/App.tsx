@@ -40,7 +40,7 @@ function App() {
           <i className="fa-regular fa-window-maximize rotate-90"></i>
         </button>
       </div>
-      <div className="p-3 z-10 flex items-center justify-between bg-[#202123] dark:bg-[#343541] border-b sticky top-0  text-gray-300 md:hidden">
+      <div className="p-3 z-10 flex items-center justify-between bg-white dark:bg-[#343541] border-b border-gray-200 dark:border-gray-700 sticky top-0 text-gray-700 dark:text-gray-300 md:hidden">
         <button onClick={() => setActive(true)} className=" text-2xl flex">
           <IonIcon icon={menuOutline} />
         </button>
@@ -58,9 +58,8 @@ function App() {
         {isChatsVisible && <Chats />}
         <div
           className={classNames(
-            "fixed left-0 px-2  right-0 transition-all duration-500 bottom-0 dark:shadow-lg py-1 shadow-md backdrop-blur-sm bg-white/10 dark:bg-dark-primary/10",
+            "fixed left-0 px-2 right-0 transition-all duration-500 bottom-0 shadow-lg py-1 backdrop-blur-sm bg-white/95 dark:bg-dark-primary/95 border-t border-gray-200 dark:border-gray-700",
             {
-              "dark:bg-dark-primary bg-white": isChatsVisible,
               "md:ml-[260px]": active,
             }
           )}
@@ -74,7 +73,7 @@ function App() {
 
             <div className="dark:bg-inherit">
               <UserQuery />
-              <footer className="info text-sm py-2 text-gray-700 dark:text-white text-center">
+              <footer className="info text-sm py-2 text-gray-600 dark:text-gray-300 text-center">
                 
                 <span className="mx-2">
                   <i

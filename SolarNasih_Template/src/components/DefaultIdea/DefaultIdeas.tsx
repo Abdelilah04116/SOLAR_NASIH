@@ -2,18 +2,21 @@ import DefaultIdea from "./DefaultIdea";
 
 const defaultIdeas = [
   {
-    idea: "C'eat Quoi SolarNasih",
-    moreContext: "Donner moi des idées de contenu pour SolarNasih",
+    idea: "C'est Quoi SolarNasih",
+    moreContext: "Explique-moi ce qu'est SolarNasih, ses fonctionnalités principales et comment il peut aider dans le domaine de l'énergie solaire au Maroc",
   },
   {
-    idea: "Qui a developpé SolarNasih",
+    idea: "Qui a développé SolarNasih",
     moreContext:
-      "Donner moi l'equipe qui a developpé SolarNasih et les technologies utilisées",
+      "Parle-moi de l'équipe qui a développé SolarNasih, les technologies utilisées et l'architecture du système",
   },
-  { idea: "les Nouvelles Alert", moreContext: "Donner moi les dernières nouvelles Sur l'energier Solaire Au maroc" },
+  { 
+    idea: "Les Nouvelles Alert", 
+    moreContext: "Donne-moi les dernières nouvelles et actualités sur l'énergie solaire au Maroc, les nouvelles réglementations et les projets en cours" 
+  },
   {
     idea: "Comment utiliser SolarNasih",
-    moreContext: "Donner moi des idées de contenu pour utiliser SolarNasih",
+    moreContext: "Explique-moi comment utiliser SolarNasih efficacement, les différentes fonctionnalités disponibles et des exemples d'utilisation pratiques",
   },
 ];
 

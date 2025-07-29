@@ -26,3 +26,7 @@ logs/
 temp/
 web_vector_store/
 vector_store/
+
+# External binaries and tools
+ffmpeg.exe
+ffmpeg_download/

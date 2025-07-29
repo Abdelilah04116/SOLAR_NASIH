@@ -14,8 +14,8 @@ class RAGService:
     Interface avec le système RAG existant
     """
     
-    def __init__(self, base_url=RAG_API_URL):
-        self.base_url = base_url
+    def __init__(self, base_url=None):
+        self.base_url = base_url or settings.RAG_ENDPOINT
         self.similarity_threshold = settings.RAG_SIMILARITY_THRESHOLD
         
     async def query(

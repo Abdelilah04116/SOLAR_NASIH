@@ -548,6 +548,43 @@ async def get_system_status():
         }
     }
 
+@app.get("/test-indexing")
+async def test_indexing():
+    """Test simple pour vérifier l'indexation"""
+    try:
+        if not FULL_SYSTEM_AVAILABLE:
+            return {
+                "status": "demo_mode",
+                "message": "Système en mode démo - indexation simulée",
+                "indexing_works": True
+            }
+        
+        # Test simple d'indexation
+        test_chunk = {
+            "content": "Test de contenu pour vérifier l'indexation",
+            "metadata": {
+                "doc_type": "test",
+                "source": "test.txt",
+                "chunk_id": 0
+            }
+        }
+        
+        success = indexer.index_single_chunk(test_chunk)
+        
+        return {
+            "status": "test_completed",
+            "indexing_works": success,
+            "message": "Test d'indexation réussi" if success else "Test d'indexation échoué"
+        }
+        
+    except Exception as e:
+        logger.error(f"Test indexing failed: {str(e)}")
+        return {
+            "status": "test_failed",
+            "indexing_works": False,
+            "error": str(e)
+        }
+
 @app.get("/docs-info")
 async def get_docs_info():
     """Informations sur la documentation"""
