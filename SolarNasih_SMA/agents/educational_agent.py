@@ -5,6 +5,7 @@ from models.schemas import AgentType, Language
 from services.gemini_service import GeminiService
 from services.tavily_service import TavilyService
 import logging
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,7 @@ class EducationalAgent(BaseAgent):
         self.tavily_service = TavilyService()
     
     def _init_tools(self) -> List[BaseTool]:
-        return [
-            self.create_quiz_tool,
-            self.generate_lesson_plan_tool,
-            self.create_educational_content_tool,
-            self.generate_infographic_data_tool,
-            self.create_practical_exercise_tool,
-            self.assess_knowledge_tool,
-            self.create_certification_path_tool
-        ]
+        return []  # Plus de tools décorés, les méthodes sont appelées directement
     
     def _get_system_prompt(self) -> str:
         """Prompt système de l'agent pédagogique"""
@@ -51,10 +44,14 @@ class EducationalAgent(BaseAgent):
         - Incluant des évaluations
         """
     
-    @tool
     def create_quiz_tool(self, topic: str, difficulty: str = "intermediate", num_questions: int = 10) -> Dict[str, Any]:
         """Crée un quiz interactif sur un sujet donné"""
         try:
+            # Debug logging
+            logger.info(f"create_quiz_tool called with:")
+            logger.info(f"  topic: {topic}")
+            logger.info(f"  difficulty: {difficulty}")
+            logger.info(f"  num_questions: {num_questions}")
             # Base de questions par niveau et sujet
             question_bank = {
                 "basics": {
@@ -155,10 +152,14 @@ class EducationalAgent(BaseAgent):
             
             # Si pas assez de questions, compléter avec des questions générées
             if len(selected_questions) < num_questions:
+                logger.info(f"Not enough questions in bank ({len(selected_questions)}), generating {num_questions - len(selected_questions)} additional questions")
                 additional_questions = self._generate_additional_questions(
                     topic, difficulty, num_questions - len(selected_questions)
                 )
+                logger.info(f"Generated {len(additional_questions)} additional questions")
                 selected_questions.extend(additional_questions)
+            
+            logger.info(f"Final quiz has {len(selected_questions)} questions")
             
             quiz_data = {
                 "title": f"Quiz {topic.title()} - Niveau {difficulty}",
@@ -186,7 +187,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur création quiz: {e}")
             return {"error": str(e)}
     
-    @tool
     def generate_lesson_plan_tool(self, subject: str, target_audience: str = "general", duration: int = 60) -> Dict[str, Any]:
         """Génère un plan de cours structuré"""
         try:
@@ -279,7 +279,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur génération plan de cours: {e}")
             return {"error": str(e)}
     
-    @tool
     def create_educational_content_tool(self, topic: str, format_type: str = "article", complexity: str = "intermediate") -> Dict[str, Any]:
         """Crée du contenu éducatif sur un sujet donné"""
         try:
@@ -368,7 +367,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur création contenu éducatif: {e}")
             return {"error": str(e)}
     
-    @tool
     def generate_infographic_data_tool(self, data_topic: str) -> Dict[str, Any]:
         """Génère les données pour créer une infographie"""
         try:
@@ -470,7 +468,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur génération données infographie: {e}")
             return {"error": str(e)}
     
-    @tool
     def create_practical_exercise_tool(self, exercise_type: str, difficulty: str = "intermediate") -> Dict[str, Any]:
         """Crée un exercice pratique"""
         try:
@@ -564,7 +561,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur création exercice pratique: {e}")
             return {"error": str(e)}
     
-    @tool
     def assess_knowledge_tool(self, answers: Dict[str, Any], topic: str) -> Dict[str, Any]:
         """Évalue les connaissances basées sur les réponses données"""
         try:
@@ -613,7 +609,6 @@ class EducationalAgent(BaseAgent):
             logger.error(f"Erreur évaluation connaissances: {e}")
             return {"error": str(e)}
     
-    @tool
     def create_certification_path_tool(self, target_certification: str, current_level: str = "beginner") -> Dict[str, Any]:
         """Crée un parcours de certification personnalisé"""
         try:
@@ -697,21 +692,218 @@ class EducationalAgent(BaseAgent):
     
     def _generate_additional_questions(self, topic: str, difficulty: str, num_questions: int) -> List[Dict[str, Any]]:
         """Génère des questions supplémentaires dynamiquement"""
-        # Génération avec Gemini pour questions additionnelles
         additional_questions = []
         
-        # Questions génériques par défaut
-        default_questions = [
-            {
-                "question": f"Quelle est l'importance de {topic} dans le domaine solaire ?",
-                "options": ["Très importante", "Modérément importante", "Peu importante", "Non importante"],
-                "correct": 0,
-                "explanation": f"{topic} joue un rôle crucial dans le secteur photovoltaïque."
+        # Questions génériques par défaut pour différents sujets et niveaux
+        question_templates = {
+            "basics": {
+                "beginner": [
+                    {
+                        "question": "Qu'est-ce que l'énergie solaire ?",
+                        "options": ["Énergie du soleil", "Énergie du vent", "Énergie de l'eau", "Énergie fossile"],
+                        "correct": 0,
+                        "explanation": "L'énergie solaire provient directement du rayonnement du soleil."
+                    },
+                    {
+                        "question": "Quel est l'avantage principal du solaire ?",
+                        "options": ["Gratuit", "Polluant", "Complexe", "Coûteux"],
+                        "correct": 0,
+                        "explanation": "L'énergie solaire est gratuite et renouvelable."
+                    },
+                    {
+                        "question": "Qu'est-ce qu'un panneau photovoltaïque ?",
+                        "options": ["Un dispositif qui produit de l'électricité", "Un dispositif qui chauffe l'eau", "Un dispositif qui stocke l'énergie", "Un dispositif qui mesure la température"],
+                        "correct": 0,
+                        "explanation": "Un panneau photovoltaïque convertit la lumière en électricité."
+                    }
+                ],
+                "intermediate": [
+                    {
+                        "question": "Quel est le rendement typique d'un panneau solaire ?",
+                        "options": ["5-10%", "15-20%", "25-30%", "35-40%"],
+                        "correct": 1,
+                        "explanation": "Les panneaux commerciaux ont un rendement de 15-20%."
+                    },
+                    {
+                        "question": "Qu'est-ce que l'irradiance ?",
+                        "options": ["La puissance du soleil", "La température", "La pression", "L'humidité"],
+                        "correct": 0,
+                        "explanation": "L'irradiance mesure la puissance du rayonnement solaire."
+                    }
+                ],
+                "advanced": [
+                    {
+                        "question": "Quel est l'effet de la température sur les panneaux ?",
+                        "options": ["Améliore le rendement", "Diminue le rendement", "Aucun effet", "Augmente la tension"],
+                        "correct": 1,
+                        "explanation": "La température élevée diminue le rendement des panneaux."
+                    }
+                ]
+            },
+            "installation": {
+                "beginner": [
+                    {
+                        "question": "Quelle orientation est optimale ?",
+                        "options": ["Nord", "Sud", "Est", "Ouest"],
+                        "correct": 1,
+                        "explanation": "L'orientation Sud maximise l'exposition au soleil."
+                    }
+                ],
+                "intermediate": [
+                    {
+                        "question": "Quelle inclinaison optimise la production ?",
+                        "options": ["15°", "30°", "35°", "45°"],
+                        "correct": 2,
+                        "explanation": "35° est l'inclinaison optimale pour la production annuelle."
+                    }
+                ]
+            },
+            "economics": {
+                "beginner": [
+                    {
+                        "question": "Qu'est-ce que l'autoconsommation ?",
+                        "options": ["Vendre l'électricité", "Consommer sa production", "Stocker l'énergie", "Acheter de l'électricité"],
+                        "correct": 1,
+                        "explanation": "L'autoconsommation consiste à utiliser sa propre production."
+                    }
+                ],
+                "intermediate": [
+                    {
+                        "question": "Quel est l'avantage économique principal ?",
+                        "options": ["Subventions", "Réduction de facture", "Vente d'électricité", "Tous les précédents"],
+                        "correct": 3,
+                        "explanation": "Tous ces avantages contribuent à la rentabilité."
+                    }
+                ]
             }
-        ]
+        }
         
-        # Retourner le nombre demandé de questions par défaut
-        return default_questions[:num_questions]
+        # Sélectionner les questions appropriées
+        topic_questions = question_templates.get(topic, question_templates["basics"])
+        difficulty_questions = topic_questions.get(difficulty, topic_questions.get("beginner", []))
+        
+        # Si pas assez de questions spécifiques, utiliser des questions génériques
+        if len(difficulty_questions) < num_questions:
+            # Ajouter des questions génériques
+            generic_questions = [
+                {
+                    "question": f"Quelle est l'importance de {topic} dans le domaine solaire ?",
+                    "options": ["Très importante", "Modérément importante", "Peu importante", "Non importante"],
+                    "correct": 0,
+                    "explanation": f"{topic} joue un rôle crucial dans le secteur photovoltaïque."
+                },
+                {
+                    "question": f"Quel aspect de {topic} est le plus critique ?",
+                    "options": ["La technique", "L'économie", "La réglementation", "L'environnement"],
+                    "correct": 0,
+                    "explanation": f"L'aspect technique de {topic} est fondamental pour la réussite."
+                },
+                {
+                    "question": f"Comment optimiser {topic} ?",
+                    "options": ["Étude préalable", "Installation rapide", "Maintenance minimale", "Coût réduit"],
+                    "correct": 0,
+                    "explanation": f"Une étude préalable approfondie est essentielle pour optimiser {topic}."
+                },
+                {
+                    "question": f"Quel est le principal défi de {topic} ?",
+                    "options": ["Le coût", "La complexité", "La maintenance", "La réglementation"],
+                    "correct": 0,
+                    "explanation": f"Le coût est souvent le principal défi dans le domaine de {topic}."
+                },
+                {
+                    "question": f"Quelle technologie est la plus avancée pour {topic} ?",
+                    "options": ["Photovoltaïque", "Thermique", "Hybride", "Concentrée"],
+                    "correct": 0,
+                    "explanation": f"Le photovoltaïque est la technologie la plus développée pour {topic}."
+                },
+                {
+                    "question": f"Quel est l'impact environnemental de {topic} ?",
+                    "options": ["Positif", "Négatif", "Neutre", "Variable"],
+                    "correct": 0,
+                    "explanation": f"{topic} a un impact environnemental positif en réduisant les émissions."
+                },
+                {
+                    "question": f"Quelle est la durée de vie typique des équipements de {topic} ?",
+                    "options": ["5-10 ans", "10-15 ans", "20-25 ans", "30+ ans"],
+                    "correct": 2,
+                    "explanation": f"Les équipements de {topic} ont généralement une durée de vie de 20-25 ans."
+                },
+                {
+                    "question": f"Quel facteur influence le plus {topic} ?",
+                    "options": ["Le climat", "La géographie", "L'économie", "La technologie"],
+                    "correct": 0,
+                    "explanation": f"Le climat est le facteur principal qui influence {topic}."
+                },
+                {
+                    "question": f"Quelle est la tendance actuelle pour {topic} ?",
+                    "options": ["Croissance", "Stagnation", "Déclin", "Instabilité"],
+                    "correct": 0,
+                    "explanation": f"{topic} connaît une croissance constante grâce aux avancées technologiques."
+                },
+                {
+                    "question": f"Quel est le marché principal pour {topic} ?",
+                    "options": ["Résidentiel", "Commercial", "Industriel", "Tous les secteurs"],
+                    "correct": 3,
+                    "explanation": f"{topic} s'applique à tous les secteurs : résidentiel, commercial et industriel."
+                },
+                {
+                    "question": f"Quelle innovation récente impacte {topic} ?",
+                    "options": ["IA", "IoT", "Batteries", "Toutes ces réponses"],
+                    "correct": 3,
+                    "explanation": f"L'IA, l'IoT et les nouvelles batteries révolutionnent {topic}."
+                },
+                {
+                    "question": f"Quel est le rôle de la maintenance dans {topic} ?",
+                    "options": ["Optionnel", "Recommandé", "Essentiel", "Inutile"],
+                    "correct": 2,
+                    "explanation": f"La maintenance est essentielle pour optimiser les performances de {topic}."
+                },
+                {
+                    "question": f"Quelle certification est importante pour {topic} ?",
+                    "options": ["ISO", "CE", "UL", "Toutes ces réponses"],
+                    "correct": 3,
+                    "explanation": f"Les certifications ISO, CE et UL sont importantes pour {topic}."
+                },
+                {
+                    "question": f"Quel est l'avenir de {topic} ?",
+                    "options": ["Prometteur", "Incertain", "Limité", "Déclinant"],
+                    "correct": 0,
+                    "explanation": f"L'avenir de {topic} est très prometteur avec les innovations technologiques."
+                },
+                {
+                    "question": f"Quelle formation est nécessaire pour {topic} ?",
+                    "options": ["Aucune", "Basique", "Spécialisée", "Avancée"],
+                    "correct": 2,
+                    "explanation": f"Une formation spécialisée est recommandée pour maîtriser {topic}."
+                }
+            ]
+            difficulty_questions.extend(generic_questions)
+        
+        # Si on a encore besoin de plus de questions, générer des questions dynamiques
+        if len(difficulty_questions) < num_questions:
+            remaining_questions = num_questions - len(difficulty_questions)
+            logger.info(f"Generating {remaining_questions} additional dynamic questions")
+            
+            # Questions dynamiques basées sur le topic
+            dynamic_questions = []
+            for i in range(remaining_questions):
+                question_num = i + 1
+                dynamic_questions.append({
+                    "question": f"Question {question_num} sur {topic} : Quel aspect est le plus important ?",
+                    "options": [
+                        f"Aspect technique de {topic}",
+                        f"Aspect économique de {topic}",
+                        f"Aspect environnemental de {topic}",
+                        f"Aspect réglementaire de {topic}"
+                    ],
+                    "correct": random.randint(0, 3),
+                    "explanation": f"Cette question teste la compréhension des différents aspects de {topic}."
+                })
+            
+            difficulty_questions.extend(dynamic_questions)
+        
+        # Retourner le nombre demandé de questions
+        return difficulty_questions[:num_questions]
     
     def _create_generic_lesson_plan(self, subject: str, audience: str, duration: int) -> Dict[str, Any]:
         """Crée un plan de cours générique"""
@@ -1014,6 +1206,14 @@ class EducationalAgent(BaseAgent):
                 topic = self._extract_topic(state.current_message)
                 difficulty = self._extract_difficulty(state.current_message)
                 num_questions = self._extract_num_questions(state.current_message)
+                
+                # Debug logging
+                logger.info(f"Educational Agent - Extracted parameters:")
+                logger.info(f"  Topic: {topic}")
+                logger.info(f"  Difficulty: {difficulty}")
+                logger.info(f"  Number of questions: {num_questions}")
+                logger.info(f"  Original message: {state.current_message}")
+                
                 result = self.create_quiz_tool(topic, difficulty, num_questions)
             elif educational_type == "lesson":
                 subject = self._extract_subject(state.current_message)
@@ -1091,21 +1291,55 @@ class EducationalAgent(BaseAgent):
         """Extrait le niveau de difficulté"""
         text = user_input.lower()
         
-        if any(word in text for word in ["débutant", "facile", "simple", "basique"]):
+        # Mots-clés pour chaque niveau
+        beginner_keywords = ["débutant", "facile", "simple", "basique", "beginner", "easy", "basic", "niveau 1", "niveau un", "level 1", "level one"]
+        intermediate_keywords = ["intermédiaire", "moyen", "intermediate", "medium", "niveau 2", "niveau deux", "level 2", "level two", "modéré", "moderate"]
+        advanced_keywords = ["avancé", "expert", "difficile", "complexe", "advanced", "hard", "difficult", "niveau 3", "niveau trois", "level 3", "level three", "expert", "professionnel"]
+        
+        if any(word in text for word in beginner_keywords):
+            logger.info(f"Extracted difficulty: beginner")
             return "beginner"
-        elif any(word in text for word in ["avancé", "expert", "difficile", "complexe"]):
+        elif any(word in text for word in advanced_keywords):
+            logger.info(f"Extracted difficulty: advanced")
             return "advanced"
+        elif any(word in text for word in intermediate_keywords):
+            logger.info(f"Extracted difficulty: intermediate")
+            return "intermediate"
         else:
+            logger.info(f"No difficulty found, using default: intermediate")
             return "intermediate"
     
     def _extract_num_questions(self, user_input: str) -> int:
         """Extrait le nombre de questions souhaité"""
         import re
-        numbers = re.findall(r'\d+', user_input)
-        if numbers:
-            num = int(numbers[0])
-            return min(max(num, 5), 50)  # Entre 5 et 50 questions
-        return 10
+        
+        # Patterns pour détecter les nombres de questions
+        patterns = [
+            r'(\d+)\s*questions?',  # "5 questions", "10 question"
+            r'(\d+)\s*quiz',        # "5 quiz"
+            r'(\d+)\s*test',        # "5 test"
+            r'(\d+)\s*exercices?',  # "5 exercices"
+            r'(\d+)\s*items?',      # "5 items"
+            r'(\d+)',               # Juste un nombre
+        ]
+        
+        text = user_input.lower()
+        
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                num = int(match.group(1))
+                logger.info(f"Extracted number of questions: {num} from pattern '{pattern}'")
+                return min(max(num, 1), 50)  # Entre 1 et 50 questions
+        
+        # Si aucun nombre trouvé, chercher des mots-clés
+        if any(word in text for word in ["beaucoup", "plusieurs", "multiple", "many", "several"]):
+            return 15
+        elif any(word in text for word in ["peu", "quelques", "few", "some"]):
+            return 5
+        else:
+            logger.info("No number found, using default: 10")
+            return 10
     
     def _extract_subject(self, user_input: str) -> str:
         """Extrait le sujet du cours"""
@@ -1190,14 +1424,15 @@ class EducationalAgent(BaseAgent):
             # En production, on pourrait ajouter des traductions
             
             if educational_type == "quiz":
-                quiz_data = result.get("quiz", {})
+                # Le résultat est directement les données du quiz, pas wrapper dans "quiz"
+                quiz_data = result
                 questions = quiz_data.get("questions", [])
                 
                 topic = quiz_data.get('topic', 'l\'énergie solaire')
                 difficulty = quiz_data.get('difficulty', 'intermédiaire')
                 response = f"📚 Quiz sur {topic} ({difficulty})\n\n"
                 
-                for i, question in enumerate(questions[:3], 1):  # Afficher les 3 premières questions
+                for i, question in enumerate(questions, 1):  # Afficher toutes les questions
                     response += f"Question {i}: {question.get('question', '')}\n"
                     options = question.get('options', [])
                     for j, option in enumerate(options):
@@ -1208,9 +1443,10 @@ class EducationalAgent(BaseAgent):
                 response += f"Total: {len(questions)} questions"
                 
             elif educational_type == "lesson":
-                lesson_data = result.get("lesson_plan", {})
+                # Le résultat est directement les données du plan de cours
+                lesson_data = result
                 response = f"📖 Plan de cours: {lesson_data.get('title', '')}\n\n"
-                response += f"Durée: {lesson_data.get('duration', 0)} minutes\n"
+                response += f"Durée: {lesson_data.get('duration_minutes', 0)} minutes\n"
                 response += f"Public: {lesson_data.get('target_audience', '')}\n\n"
                 
                 objectives = lesson_data.get("objectives", [])
@@ -1221,7 +1457,8 @@ class EducationalAgent(BaseAgent):
                     response += "\n"
                 
             elif educational_type == "content":
-                content_data = result.get("content", {})
+                # Le résultat est directement les données du contenu
+                content_data = result
                 response = f"📝 Contenu éducatif: {content_data.get('title', '')}\n\n"
                 response += f"Format: {content_data.get('format_type', '')}\n"
                 response += f"Complexité: {content_data.get('complexity', '')}\n\n"
@@ -1250,6 +1487,8 @@ class EducationalAgent(BaseAgent):
         ]
         
         return any(keyword in user_input.lower() for keyword in educational_keywords)
+    
+
 
 # Instance globale
 educational_agent = EducationalAgent()
