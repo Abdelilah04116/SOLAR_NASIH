@@ -49,6 +49,11 @@ export interface ThemeType {
   setTheme: (theme: Theme) => void;
 }
 
+export interface MicrophoneAlertType {
+  showMicrophoneAlert: boolean;
+  setShowMicrophoneAlert: (show: boolean) => void;
+}
+
 export type ModalList = (typeof modalsList)[number];
 
 export interface SettingsType {
@@ -337,6 +342,17 @@ const useTheme = create<ThemeType>()(
   )
 );
 
+const useMicrophoneAlert = create<MicrophoneAlertType>((set) => ({
+  showMicrophoneAlert: false,
+  setShowMicrophoneAlert: (show) => {
+    set(
+      produce((state) => {
+        state.showMicrophoneAlert = show;
+      })
+    );
+  },
+}));
+
 export const months = [
   "Januray",
   "February",
@@ -414,4 +430,4 @@ export const isChatSelected = (id: string) => (state: ChatType) =>
   state.chats[0]?.id === id;
 
 export default useChat;
-export { useAuth, useSettings, useTheme };
+export { useAuth, useSettings, useTheme, useMicrophoneAlert };

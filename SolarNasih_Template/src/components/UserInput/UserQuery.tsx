@@ -2,7 +2,7 @@ import { IonIcon } from "@ionic/react";
 import classNames from "classnames";
 import { sendOutline, send, cloudUploadOutline, documentOutline, micOutline, mic, closeOutline, checkmarkOutline } from "ionicons/icons";
 import { useRef, useState, useEffect } from "react";
-import useChat from "../../store/store";
+import useChat, { useMicrophoneAlert } from "../../store/store";
 import { createMessage } from "../../utils/createMessage";
 import axios from "axios";
 import { sendChatMessage } from "../../services/smaApi"; // Ajoute l'import correct
@@ -22,11 +22,26 @@ export default function UserQuery() {
   const audioBlobRef = useRef<Blob | null>(null);
   
   // États pour les alertes personnalisées
-  const [showMicrophoneAlert, setShowMicrophoneAlert] = useState(false);
   const [showRecordingStarted, setShowRecordingStarted] = useState(false);
   const [showRecordingStopped, setShowRecordingStopped] = useState(false);
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // État global pour l'alerte microphone
+  const { showMicrophoneAlert, setShowMicrophoneAlert } = useMicrophoneAlert();
+
+  // Écouter l'événement de démarrage d'enregistrement
+  useEffect(() => {
+    const handleStartRecording = () => {
+      console.log('🎤 Événement de démarrage d\'enregistrement reçu');
+      startRecording();
+    };
+
+    window.addEventListener('startMicrophoneRecording', handleStartRecording);
+    return () => {
+      window.removeEventListener('startMicrophoneRecording', handleStartRecording);
+    };
+  }, []);
 
   useEffect(() => {
     if (isRecording) {
@@ -186,9 +201,11 @@ export default function UserQuery() {
   }
 
   function startRecording() {
-    setShowMicrophoneAlert(false);
+    console.log('🎤 Démarrage de l\'enregistrement...');
+    // Ne plus fermer l'alerte ici car elle est gérée globalement
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then((stream) => {
+        console.log('✅ Permission microphone accordée');
         streamRef.current = stream;
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
@@ -200,14 +217,15 @@ export default function UserQuery() {
           }
         };
         
-                  mediaRecorder.onstop = () => {
-            // Essayer d'enregistrer en WAV, sinon utiliser WebM
-            const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm';
-            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-            audioBlobRef.current = audioBlob;
-            setShowRecordingStopped(true);
-            setTimeout(() => setShowRecordingStopped(false), 3000);
-          };
+        mediaRecorder.onstop = () => {
+          console.log('🛑 Enregistrement arrêté');
+          // Essayer d'enregistrer en WAV, sinon utiliser WebM
+          const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm';
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+          audioBlobRef.current = audioBlob;
+          setShowRecordingStopped(true);
+          setTimeout(() => setShowRecordingStopped(false), 3000);
+        };
         
         mediaRecorder.start();
         setIsRecording(true);
@@ -215,6 +233,7 @@ export default function UserQuery() {
         setTimeout(() => setShowRecordingStarted(false), 3000);
       })
       .catch((err) => {
+        console.error('❌ Erreur microphone:', err);
         setErrorMessage("Impossible d'accéder au micro : " + err.message);
         setShowError(true);
         setTimeout(() => setShowError(false), 5000);
@@ -287,63 +306,38 @@ export default function UserQuery() {
 
   return (
     <div>
-      {/* Alertes personnalisées */}
-      {showMicrophoneAlert && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all animate-scaleIn">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                <IonIcon icon={mic} className="text-3xl text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
-              Activer le microphone
-            </h3>
-            <p className="text-gray-600 dark:text-gray-300 text-center mb-6">
-              Voulez-vous autoriser l'accès au microphone pour enregistrer un message vocal ?
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowMicrophoneAlert(false)}
-                className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={startRecording}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
-              >
-                <IonIcon icon={checkmarkOutline} className="mr-2" />
-                Autoriser
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showRecordingStarted && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
+        <div className="fixed top-4 right-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-slideInRight border border-green-400">
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-white rounded-full mr-3 animate-pulse"></div>
-            <span className="font-medium">Enregistrement démarré ! Parlez...</span>
+            <div className="w-4 h-4 bg-white rounded-full mr-3 animate-pulse shadow-lg"></div>
+            <div>
+              <span className="font-semibold text-sm">🎤 Enregistrement en cours</span>
+              <p className="text-xs opacity-90">Parlez maintenant, SolarNasih vous écoute...</p>
+            </div>
           </div>
         </div>
       )}
 
       {showRecordingStopped && (
-        <div className="fixed top-4 right-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
+        <div className="fixed top-4 right-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-slideInRight border border-blue-400">
           <div className="flex items-center">
-            <IonIcon icon={checkmarkOutline} className="mr-2" />
-            <span className="font-medium">Enregistrement terminé</span>
+            <IonIcon icon={checkmarkOutline} className="mr-3 text-xl" />
+            <div>
+              <span className="font-semibold text-sm">✅ Enregistrement terminé</span>
+              <p className="text-xs opacity-90">Traitement par l'agent vocal en cours...</p>
+            </div>
           </div>
         </div>
       )}
 
       {showError && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideInRight">
-          <div className="flex items-center">
-            <IonIcon icon={closeOutline} className="mr-2" />
-            <span className="font-medium">{errorMessage}</span>
+        <div className="fixed top-4 right-4 bg-gradient-to-r from-red-500 to-pink-600 text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-slideInRight border border-red-400 max-w-sm">
+          <div className="flex items-start">
+            <IonIcon icon={closeOutline} className="mr-3 text-xl mt-0.5 flex-shrink-0" />
+            <div>
+              <span className="font-semibold text-sm">❌ Erreur microphone</span>
+              <p className="text-xs opacity-90 mt-1">{errorMessage}</p>
+            </div>
           </div>
         </div>
       )}
