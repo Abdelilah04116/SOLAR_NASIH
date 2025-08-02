@@ -323,6 +323,60 @@ Projet VIABLE avec excellent profil risque/rendement
         
         return analysis
     
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête commerciale"""
+        try:
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
+            
+            # Analyse du type de demande commerciale
+            message_lower = state.current_message.lower()
+            
+            if any(word in message_lower for word in ["roi", "retour", "investissement", "rentabilité"]):
+                result = self._calculate_roi(state.current_message)
+            elif any(word in message_lower for word in ["financement", "prêt", "crédit", "aides"]):
+                result = self._find_financing(state.current_message)
+            elif any(word in message_lower for word in ["devis", "prix", "coût", "tarif"]):
+                result = self._generate_quote(state.current_message)
+            elif any(word in message_lower for word in ["comparer", "comparaison", "offres"]):
+                result = self._compare_offers(state.current_message)
+            elif any(word in message_lower for word in ["économies", "sauvegarder", "réduire"]):
+                result = self._calculate_savings(state.current_message)
+            elif any(word in message_lower for word in ["viabilité", "faisabilité", "rentable"]):
+                result = self._analyze_financial_viability(state.current_message)
+            else:
+                # Analyse financière générale
+                result = self._calculate_roi(state.current_message)
+            
+            # Génération de la réponse dans la langue détectée
+            response = self._generate_commercial_response(result, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "commercial_assistant",
+                "confidence": 0.85,
+                "detected_language": detected_language,
+                "sources": ["Solar Nasih Commercial Database"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Erreur dans l'assistant commercial: {e}")
+            return {
+                "response": f"Erreur lors de l'analyse commerciale: {str(e)}",
+                "agent_used": "commercial_assistant",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih Commercial Database"]
+            }
+    
+    def _generate_commercial_response(self, result: str, language: str) -> str:
+        """Génère une réponse commerciale dans la langue appropriée"""
+        # Pour l'instant, retourner le résultat tel quel
+        # En production, on pourrait ajouter des traductions
+        return result
+    
     def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> float:
         commercial_keywords = [
             "prix", "coût", "devis", "financement", "crédit", "aide",

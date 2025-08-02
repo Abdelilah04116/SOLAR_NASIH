@@ -554,47 +554,58 @@ class RegulatoryAssistantAgent(BaseAgent):
         
         return recommendations
     
-    async def process(self, user_input: str, context: Dict[str, Any], language: Language = Language.FRENCH) -> Any:
-        """Traitement spécialisé pour les questions réglementaires"""
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête réglementaire"""
         try:
-            # Analyser le type de demande réglementaire
-            regulatory_type = self._classify_regulatory_request(user_input)
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
             
-            # Traitement selon le type
-            if regulatory_type == "aides":
-                location = self._extract_location(user_input, context)
-                result = self.get_solar_incentives_tool(location)
-                
-            elif regulatory_type == "fiscalite":
-                income_level = self._extract_income_level(user_input, context)
-                result = self.get_tax_benefits_tool(income_level)
-                
-            elif regulatory_type == "reglementation":
-                reg_type = self._extract_regulation_type(user_input)
-                result = self.get_regulations_tool(reg_type)
-                
-            elif regulatory_type == "douanes":
-                product_type = self._extract_product_type(user_input)
-                result = self.get_customs_info_tool(product_type)
-                
-            elif regulatory_type == "eligibilite":
-                installation_data = self._extract_installation_data(user_input, context)
-                result = self.check_eligibility_tool(installation_data)
-                
+            # Classification de la demande réglementaire
+            regulatory_type = self._classify_regulatory_request(state.current_message)
+            
+            # Extraction des paramètres selon le type
+            if regulatory_type == "incentives":
+                location = self._extract_location(state.current_message, state.context)
+                result = self.get_solar_incentives_tool(location=location)
+            elif regulatory_type == "tax_benefits":
+                income_level = self._extract_income_level(state.current_message, state.context)
+                result = self.get_tax_benefits_tool(income_level=income_level)
+            elif regulatory_type == "regulations":
+                regulation_type = self._extract_regulation_type(state.current_message)
+                result = self.get_regulations_tool(regulation_type=regulation_type)
+            elif regulatory_type == "customs":
+                product_type = self._extract_product_type(state.current_message)
+                result = self.get_customs_info_tool(product_type=product_type)
+            elif regulatory_type == "eligibility":
+                installation_data = self._extract_installation_data(state.current_message, state.context)
+                result = self.check_eligibility_tool(installation_data=installation_data)
             else:
-                # Analyse générale
-                result = {
-                    "message": "Je peux vous aider avec les aspects réglementaires du solaire",
-                    "topics": ["aides", "fiscalité", "réglementation", "douanes", "éligibilité"]
-                }
+                # Réponse générale sur les aides
+                result = self.get_solar_incentives_tool()
             
-            # Générer une réponse structurée
-            response = await self._generate_regulatory_response(result, regulatory_type, language)
-            return response
+            # Génération de la réponse dans la langue détectée
+            response = await self._generate_regulatory_response(result, regulatory_type, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "regulatory_assistant",
+                "confidence": 0.85,
+                "detected_language": detected_language,
+                "regulatory_type": regulatory_type,
+                "sources": ["Service-public.fr", "ADEME", "ANAH", "Légifrance"]
+            }
             
         except Exception as e:
-            logger.error(f"Erreur traitement réglementaire: {e}")
-            return f"Erreur lors du traitement réglementaire: {str(e)}"
+            logger.error(f"Erreur dans l'assistant réglementaire: {e}")
+            return {
+                "response": f"Erreur lors de la consultation réglementaire: {str(e)}",
+                "agent_used": "regulatory_assistant",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih Regulatory Database"]
+            }
     
     def _classify_regulatory_request(self, user_input: str) -> str:
         """Classifie le type de demande réglementaire"""

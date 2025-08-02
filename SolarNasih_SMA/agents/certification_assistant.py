@@ -412,6 +412,60 @@ Maximum prise en charge: 100% coûts pédagogiques
         
         return funding
     
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête de certification"""
+        try:
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
+            
+            # Analyse du type de demande de certification
+            message_lower = state.current_message.lower()
+            
+            if any(word in message_lower for word in ["rge", "qualification", "certification", "qualifié"]):
+                result = self._check_certification_requirements("rge")
+            elif any(word in message_lower for word in ["formation", "centre", "stage", "apprendre"]):
+                result = self._find_training_centers("france")
+            elif any(word in message_lower for word in ["validité", "expire", "renouveler"]):
+                result = self._track_certification_validity("rge")
+            elif any(word in message_lower for word in ["parcours", "étapes", "processus"]):
+                result = self._plan_certification_path("electricien")
+            elif any(word in message_lower for word in ["coût", "prix", "tarif", "budget"]):
+                result = self._estimate_certification_costs("rge")
+            elif any(word in message_lower for word in ["financement", "aide", "subvention"]):
+                result = self._find_funding_opportunities("particulier")
+            else:
+                # Information générale sur les certifications
+                result = self._check_certification_requirements("rge")
+            
+            # Génération de la réponse dans la langue détectée
+            response = self._generate_certification_response(result, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "certification_assistant",
+                "confidence": 0.9,
+                "detected_language": detected_language,
+                "sources": ["Solar Nasih Certification Database"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Erreur dans l'assistant certification: {e}")
+            return {
+                "response": f"Erreur lors de la consultation certification: {str(e)}",
+                "agent_used": "certification_assistant",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih Certification Database"]
+            }
+    
+    def _generate_certification_response(self, result: str, language: str) -> str:
+        """Génère une réponse de certification dans la langue appropriée"""
+        # Pour l'instant, retourner le résultat tel quel
+        # En production, on pourrait ajouter des traductions
+        return result
+    
     def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> float:
         cert_keywords = [
             "certification", "rge", "qualification", "formation", "diplôme",

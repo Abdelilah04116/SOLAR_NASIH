@@ -652,6 +652,60 @@ Chaque template peut être adapté selon:
         
         return customization
     
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête de génération de document"""
+        try:
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
+            
+            # Analyse du type de demande de document
+            message_lower = state.current_message.lower()
+            
+            if any(word in message_lower for word in ["devis", "prix", "estimation", "tarif"]):
+                result = self._generate_quote_document("devis standard")
+            elif any(word in message_lower for word in ["rapport", "étude", "technique", "analyse"]):
+                result = self._create_technical_report("étude complète")
+            elif any(word in message_lower for word in ["contrat", "engagement", "signature"]):
+                result = self._generate_contract("contrat standard")
+            elif any(word in message_lower for word in ["attestation", "certificat", "conformité"]):
+                result = self._create_certificate("attestation installation")
+            elif any(word in message_lower for word in ["fiche", "technique", "spécifications"]):
+                result = self._generate_technical_sheet("fiche équipement")
+            elif any(word in message_lower for word in ["personnaliser", "adapter", "modifier"]):
+                result = self._customize_template("template personnalisé")
+            else:
+                # Génération de devis par défaut
+                result = self._generate_quote_document("devis standard")
+            
+            # Génération de la réponse dans la langue détectée
+            response = self._generate_document_response(result, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "document_generator",
+                "confidence": 0.9,
+                "detected_language": detected_language,
+                "sources": ["Solar Nasih Document Database"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Erreur dans le générateur de documents: {e}")
+            return {
+                "response": f"Erreur lors de la génération de document: {str(e)}",
+                "agent_used": "document_generator",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih Document Database"]
+            }
+    
+    def _generate_document_response(self, result: str, language: str) -> str:
+        """Génère une réponse de document dans la langue appropriée"""
+        # Pour l'instant, retourner le résultat tel quel
+        # En production, on pourrait ajouter des traductions
+        return result
+    
     def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> float:
         doc_keywords = [
             "document", "rapport", "devis", "contrat", "attestation",

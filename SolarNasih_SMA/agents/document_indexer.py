@@ -357,6 +357,60 @@ Document correctement intégré à la base.
         
         return optimization
     
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête d'indexation de document"""
+        try:
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
+            
+            # Analyse du type de demande d'indexation
+            message_lower = state.current_message.lower()
+            
+            if any(word in message_lower for word in ["valider", "vérifier", "contrôler"]):
+                result = self._validate_document("document à valider")
+            elif any(word in message_lower for word in ["catégoriser", "classer", "organiser"]):
+                result = self._categorize_document("contenu à catégoriser")
+            elif any(word in message_lower for word in ["métadonnées", "extraction", "informations"]):
+                result = self._extract_metadata("document avec métadonnées")
+            elif any(word in message_lower for word in ["upload", "télécharger", "ajouter"]):
+                result = self._trigger_rag_upload("fichier à uploader")
+            elif any(word in message_lower for word in ["doublon", "dupliquer", "existant"]):
+                result = self._check_duplicates("document à vérifier")
+            elif any(word in message_lower for word in ["optimiser", "améliorer", "performance"]):
+                result = self._optimize_indexing("optimisation requise")
+            else:
+                # Validation par défaut
+                result = self._validate_document("document standard")
+            
+            # Génération de la réponse dans la langue détectée
+            response = self._generate_indexing_response(result, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "document_indexer",
+                "confidence": 0.8,
+                "detected_language": detected_language,
+                "sources": ["Solar Nasih RAG System"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Erreur dans l'indexeur de documents: {e}")
+            return {
+                "response": f"Erreur lors de l'indexation: {str(e)}",
+                "agent_used": "document_indexer",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih RAG System"]
+            }
+    
+    def _generate_indexing_response(self, result: str, language: str) -> str:
+        """Génère une réponse d'indexation dans la langue appropriée"""
+        # Pour l'instant, retourner le résultat tel quel
+        # En production, on pourrait ajouter des traductions
+        return result
+    
     def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> float:
         index_keywords = [
             "indexer", "ajouter", "upload", "document", "base", "rag",

@@ -998,45 +998,66 @@ class EducationalAgent(BaseAgent):
         }
         return skip_by_level.get(level, [])
     
-    async def process(self, user_input: str, context: Dict[str, Any], language: Language = Language.FRENCH) -> Any:
-        """Traitement spécialisé pour les demandes pédagogiques"""
+    async def process(self, state) -> Dict[str, Any]:
+        """Méthode requise par BaseAgent - traite une requête éducative"""
         try:
-            educational_type = self._classify_educational_request(user_input)
+            # Utiliser la langue détectée par le workflow ou détecter si pas disponible
+            detected_language = getattr(state, 'detected_language', None)
+            if not detected_language:
+                detected_language = "fr"  # Défaut français
             
+            # Classification de la demande éducative
+            educational_type = self._classify_educational_request(state.current_message)
+            
+            # Extraction des paramètres selon le type
             if educational_type == "quiz":
-                topic = self._extract_topic(user_input)
-                difficulty = self._extract_difficulty(user_input)
-                num_questions = self._extract_num_questions(user_input)
+                topic = self._extract_topic(state.current_message)
+                difficulty = self._extract_difficulty(state.current_message)
+                num_questions = self._extract_num_questions(state.current_message)
                 result = self.create_quiz_tool(topic, difficulty, num_questions)
-                
             elif educational_type == "lesson":
-                subject = self._extract_subject(user_input)
-                audience = self._extract_audience(user_input)
-                duration = self._extract_duration(user_input)
+                subject = self._extract_subject(state.current_message)
+                audience = self._extract_audience(state.current_message)
+                duration = self._extract_duration(state.current_message)
                 result = self.generate_lesson_plan_tool(subject, audience, duration)
-                
-            elif educational_type == "exercise":
-                exercise_type = self._extract_exercise_type(user_input)
-                difficulty = self._extract_difficulty(user_input)
-                result = self.create_practical_exercise_tool(exercise_type, difficulty)
-                
-            elif educational_type == "certification":
-                target_cert = self._extract_certification_target(user_input)
-                current_level = self._extract_current_level(user_input)
-                result = self.create_certification_path_tool(target_cert, current_level)
-                
-            else:
-                topic = self._extract_topic(user_input)
-                format_type = self._extract_format_type(user_input)
-                complexity = self._extract_complexity(user_input)
+            elif educational_type == "content":
+                topic = self._extract_topic(state.current_message)
+                format_type = self._extract_format_type(state.current_message)
+                complexity = self._extract_complexity(state.current_message)
                 result = self.create_educational_content_tool(topic, format_type, complexity)
+            elif educational_type == "exercise":
+                exercise_type = self._extract_exercise_type(state.current_message)
+                difficulty = self._extract_difficulty(state.current_message)
+                result = self.create_practical_exercise_tool(exercise_type, difficulty)
+            elif educational_type == "certification":
+                target_certification = self._extract_certification_target(state.current_message)
+                current_level = self._extract_current_level(state.current_message)
+                result = self.create_certification_path_tool(target_certification, current_level)
+            else:
+                # Contenu éducatif général
+                result = self.create_educational_content_tool("énergie solaire", "article", "intermediate")
             
-            response = await self._generate_educational_response(result, educational_type, language)
-            return response
+            # Génération de la réponse dans la langue détectée
+            response = await self._generate_educational_response(result, educational_type, detected_language)
+            
+            return {
+                "response": response,
+                "agent_used": "educational_agent",
+                "confidence": 0.9,
+                "detected_language": detected_language,
+                "educational_type": educational_type,
+                "sources": ["Solar Nasih Educational Database"]
+            }
             
         except Exception as e:
-            logger.error(f"Erreur traitement pédagogique: {e}")
-            return f"Erreur lors du traitement pédagogique: {str(e)}"
+            logger.error(f"Erreur dans l'agent éducatif: {e}")
+            return {
+                "response": f"Erreur lors de la création de contenu éducatif: {str(e)}",
+                "agent_used": "educational_agent",
+                "confidence": 0.3,
+                "error": str(e),
+                "sources": ["Solar Nasih Educational Database"]
+            }
     
     def _classify_educational_request(self, user_input: str) -> str:
         """Classifie le type de demande pédagogique"""
@@ -1162,26 +1183,63 @@ class EducationalAgent(BaseAgent):
         """Extrait le niveau de complexité"""
         return self._extract_difficulty(user_input)
     
-    async def _generate_educational_response(self, result: Dict[str, Any], educational_type: str, language: Language) -> str:
-        """Génère une réponse pédagogique structurée"""
-        prompt = f"""
-        Générez une réponse pédagogique engageante basée sur:
-        
-        Type de contenu: {educational_type}
-        Données: {result}
-        Langue: {language.value}
-        
-        La réponse doit:
-        1. Être motivante et encourageante
-        2. Structurer clairement le contenu
-        3. Inclure des éléments interactifs
-        4. Donner des prochaines étapes concrètes
-        5. Utiliser un ton pédagogique adapté
-        
-        Format avec émojis et structure claire pour l'apprentissage.
-        """
-        
-        return await self.gemini_service.generate_response(prompt)
+    async def _generate_educational_response(self, result: Dict[str, Any], educational_type: str, language: str) -> str:
+        """Génère une réponse éducative dans la langue appropriée"""
+        try:
+            # Pour l'instant, retourner le résultat formaté
+            # En production, on pourrait ajouter des traductions
+            
+            if educational_type == "quiz":
+                quiz_data = result.get("quiz", {})
+                questions = quiz_data.get("questions", [])
+                
+                topic = quiz_data.get('topic', 'l\'énergie solaire')
+                difficulty = quiz_data.get('difficulty', 'intermédiaire')
+                response = f"📚 Quiz sur {topic} ({difficulty})\n\n"
+                
+                for i, question in enumerate(questions[:3], 1):  # Afficher les 3 premières questions
+                    response += f"Question {i}: {question.get('question', '')}\n"
+                    options = question.get('options', [])
+                    for j, option in enumerate(options):
+                        response += f"  {chr(65+j)}) {option}\n"
+                    response += f"Réponse: {chr(65 + question.get('correct', 0))}\n"
+                    response += f"Explication: {question.get('explanation', '')}\n\n"
+                
+                response += f"Total: {len(questions)} questions"
+                
+            elif educational_type == "lesson":
+                lesson_data = result.get("lesson_plan", {})
+                response = f"📖 Plan de cours: {lesson_data.get('title', '')}\n\n"
+                response += f"Durée: {lesson_data.get('duration', 0)} minutes\n"
+                response += f"Public: {lesson_data.get('target_audience', '')}\n\n"
+                
+                objectives = lesson_data.get("objectives", [])
+                if objectives:
+                    response += "Objectifs:\n"
+                    for obj in objectives:
+                        response += f"• {obj}\n"
+                    response += "\n"
+                
+            elif educational_type == "content":
+                content_data = result.get("content", {})
+                response = f"📝 Contenu éducatif: {content_data.get('title', '')}\n\n"
+                response += f"Format: {content_data.get('format_type', '')}\n"
+                response += f"Complexité: {content_data.get('complexity', '')}\n\n"
+                response += content_data.get("content", "")[:500] + "..."
+                
+            else:
+                # Réponse générique
+                response = f"Contenu éducatif généré: {educational_type}\n\n"
+                if isinstance(result, dict):
+                    response += str(result)
+                else:
+                    response += str(result)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Erreur génération réponse éducative: {e}")
+            return f"Contenu éducatif généré pour {educational_type}"
     
     def can_handle(self, user_input: str, context: Dict[str, Any]) -> bool:
         """Détermine si l'agent peut traiter cette requête"""
