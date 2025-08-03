@@ -11,29 +11,32 @@ rag_service = RAGService()
 
 async def language_detection_node(state: SolarNasihState) -> SolarNasihState:
     """
-    Nœud de détection de langue
+    Nœud de détection de langue - Utilise l'agent multilingue pour une détection précise
     """
     try:
-        # Détection simple de la langue (à améliorer)
-        message = state["current_message"].lower()
+        from agents.multilingual_detector import MultilingualDetectorAgent
         
-        # Détection basique français/anglais
-        french_indicators = ["le", "la", "les", "un", "une", "des", "est", "sont", "avec", "pour"]
-        english_indicators = ["the", "is", "are", "with", "for", "and", "or", "but"]
+        multilingual_agent = MultilingualDetectorAgent()
         
-        french_score = sum(1 for word in french_indicators if word in message)
-        english_score = sum(1 for word in english_indicators if word in message)
+        # Détection de langue avec l'agent spécialisé
+        detection_result = multilingual_agent.detect_language(state["current_message"])
         
-        if french_score > english_score:
-            state["detected_language"] = "fr"
-        else:
-            state["detected_language"] = "en"
+        detected_language = detection_result["language"]
+        confidence = detection_result["confidence"]
+        method = detection_result["method"]
         
-        state["processing_steps"].append("Language detection completed")
+        state["detected_language"] = detected_language
+        state["language_confidence"] = confidence
+        state["language_detection_method"] = method
+        
+        logger.info(f"Langue détectée: {detected_language} (confiance: {confidence}, méthode: {method})")
+        state["processing_steps"].append(f"Language detection completed: {detected_language}")
         
     except Exception as e:
+        logger.error(f"Erreur détection langue: {e}")
         state = add_error_to_state(state, f"Language detection error: {str(e)}")
         state["detected_language"] = "fr"  # Défaut en français
+        state["language_confidence"] = 0.3
     
     return state
 
@@ -515,16 +518,16 @@ async def response_formatting_node(state: SolarNasihState) -> SolarNasihState:
     return state
 
 async def multilingual_processing_node(state: SolarNasihState) -> SolarNasihState:
-    """Nœud de traitement multilingue"""
+    """Nœud de traitement multilingue - Détecte la langue et traduit la réponse"""
     try:
-        from agents.complete_remaining_agents import MultilingualDetectorAgent
+        from agents.multilingual_detector import MultilingualDetectorAgent
         
         multilingual_agent = MultilingualDetectorAgent()
         
         from models.schemas import AgentState
         agent_state = AgentState(
             current_message=state["current_message"],
-            detected_language=state["detected_language"],
+            detected_language=state.get("detected_language", "fr"),
             user_intent=state["user_intent"],
             agent_route=AgentType.MULTILINGUAL_DETECTOR,
             context=state["user_context"],
@@ -534,12 +537,25 @@ async def multilingual_processing_node(state: SolarNasihState) -> SolarNasihStat
             processing_history=state["conversation_history"]
         )
         
+        # Traitement multilingue
         result = await multilingual_agent.process(agent_state)
-        state = update_state_with_agent_result(state, AgentType.MULTILINGUAL_DETECTOR, result)
+        
+        # Mise à jour de l'état avec la langue détectée
+        if "detected_language" in result:
+            state["detected_language"] = result["detected_language"]
+        
+        # Si une réponse a été générée par l'agent multilingue, l'utiliser
+        if result.get("response"):
+            state = update_state_with_agent_result(state, AgentType.MULTILINGUAL_DETECTOR, result)
+        else:
+            # Sinon, juste mettre à jour la langue détectée pour les autres agents
+            state["detected_language"] = result.get("detected_language", "fr")
+        
+        logger.info(f"Langue détectée: {state['detected_language']}")
         
     except Exception as e:
         state = add_error_to_state(state, f"Multilingual processing error: {str(e)}")
-        state["response"] = "Erreur lors du traitement multilingue"
+        state["detected_language"] = "fr"  # Fallback en français
     
     return state
 

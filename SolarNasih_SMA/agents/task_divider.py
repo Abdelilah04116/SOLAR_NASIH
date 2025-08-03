@@ -68,7 +68,9 @@ class TaskDividerAgent(BaseAgent):
             ],
             AgentType.MULTILINGUAL_DETECTOR: [
                 r"english", r"español", r"deutsch", r"italiano",
-                r"translate", r"traduction", r"langue"
+                r"translate", r"traduction", r"langue", r"the", r"and", r"is", r"are",
+                r"كيف", r"لماذا", r"أين", r"من", r"ماذا", r"متى", r"كيفاش", r"علاش",
+                r"ⵎⴰⵏ", r"ⵎⴰⵏⵉ", r"ⵎⴰⵏⵉⵎ"
             ],
             AgentType.DOCUMENT_INDEXER: [
                 r"indexer", r"ajouter document", r"upload", r"intégrer",
@@ -222,7 +224,7 @@ class TaskDividerAgent(BaseAgent):
         agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
         
         # Construction de la réponse finale
-        final_response = self._build_final_response(agent_responses, detected_agents)
+        final_response = await self._build_final_response(agent_responses, detected_agents)
         
         # Détermination de l'agent principal utilisé
         primary_agent = detected_agents[0] if detected_agents else AgentType.TASK_DIVIDER
@@ -240,6 +242,17 @@ class TaskDividerAgent(BaseAgent):
         query_lower = message.lower()
         detected_agents = []
         
+        # 🔍 DÉTECTION AUTOMATIQUE DE LANGUE NON-FRANÇAISE
+        # Détecter si le message contient des caractères non-latins ou des mots-clés anglais
+        has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', message))
+        has_tamazight = bool(re.search(r'[\u2D30-\u2D7F]', message))
+        has_english = any(word in query_lower for word in ["the", "and", "is", "are", "was", "were", "with", "for", "but", "or"])
+        
+        # Si une langue non-française est détectée, ajouter l'agent multilingue en priorité
+        if has_arabic or has_tamazight or has_english:
+            detected_agents.append(AgentType.MULTILINGUAL_DETECTOR)
+            logger.info(f"🌐 Langue non-française détectée - Ajout de l'agent multilingue")
+        
         # Vérification des patterns pour les agents spécialisés
         for agent_type, patterns in self.route_patterns.items():
             # Ignorer RAG_SYSTEM car il sera traité séparément
@@ -248,7 +261,9 @@ class TaskDividerAgent(BaseAgent):
                 
             for pattern in patterns:
                 if re.search(pattern, query_lower):
-                    detected_agents.append(agent_type)
+                    # Éviter les doublons
+                    if agent_type not in detected_agents:
+                        detected_agents.append(agent_type)
                     break
         
         # Ajout du RAG_SYSTEM en premier pour vérification prioritaire
@@ -259,6 +274,7 @@ class TaskDividerAgent(BaseAgent):
         if len(detected_agents) == 1:
             logger.info("🔍 Aucun agent spécialisé détecté, utilisation du RAG uniquement")
         
+        logger.info(f"🤖 Agents détectés: {[agent.value for agent in detected_agents]}")
         return detected_agents
     
     async def _get_agent_responses(self, state: AgentState, agents: List[AgentType], agents_map: dict) -> List[Dict[str, Any]]:
@@ -275,17 +291,59 @@ class TaskDividerAgent(BaseAgent):
         else:
             logger.info("❌ RAG n'a pas trouvé de réponse pertinente")
         
-        # 2. 🤖 APPEL DES AGENTS SPÉCIALISÉS (si RAG n'a pas de réponse ou en complément)
+        # 2. 🌐 TRAITEMENT MULTILINGUE EN PRIORITÉ (si présent)
+        detected_language = "fr"  # Défaut français
+        multilingual_agent = None
+        
+        # Chercher l'agent multilingue dans la liste
         for agent_type in agents:
-            # Ignorer RAG_SYSTEM car déjà traité directement
-            if agent_type == AgentType.RAG_SYSTEM:
+            if agent_type == AgentType.MULTILINGUAL_DETECTOR:
+                multilingual_agent = agents_map.get(agent_type)
+                break
+        
+        # Traiter l'agent multilingue en premier s'il est présent
+        if multilingual_agent:
+            try:
+                logger.info("🌐 Traitement de l'agent multilingue en priorité...")
+                agent_state = self._prepare_agent_state(state, AgentType.MULTILINGUAL_DETECTOR)
+                result = await multilingual_agent.process(agent_state)
+                
+                # Extraire la langue détectée
+                if "detected_language" in result:
+                    detected_language = result["detected_language"]
+                    logger.info(f"🌐 Langue détectée: {detected_language}")
+                
+                # Si l'agent multilingue a généré une réponse complète, l'utiliser
+                if result.get("response") and result.get("confidence", 0) > 0.7:
+                    responses.append({
+                        "agent_type": "multilingual_detector",
+                        "response": result["response"],
+                        "confidence": result.get("confidence", 0.8),
+                        "sources": result.get("sources", []),
+                        "success": True,
+                        "detected_language": detected_language
+                    })
+                    logger.info("✅ Agent multilingue a généré une réponse complète")
+                    return responses  # Retourner directement si réponse complète
+                
+                # Sinon, continuer avec les autres agents
+                logger.info("🌐 Agent multilingue a détecté la langue, traitement des autres agents...")
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur avec l'agent multilingue: {e}")
+        
+        # 3. 🤖 APPEL DES AUTRES AGENTS SPÉCIALISÉS
+        for agent_type in agents:
+            # Ignorer RAG_SYSTEM et MULTILINGUAL_DETECTOR car déjà traités
+            if agent_type in [AgentType.RAG_SYSTEM, AgentType.MULTILINGUAL_DETECTOR]:
                 continue
                 
             agent = agents_map.get(agent_type)
             if agent:
                 try:
-                    # Préparation de l'état pour l'agent
+                    # Préparation de l'état pour l'agent avec la langue détectée
                     agent_state = self._prepare_agent_state(state, agent_type)
+                    agent_state.detected_language = detected_language  # Passer la langue détectée
                     
                     # Appel de l'agent
                     if agent_type == AgentType.TASK_DIVIDER:
@@ -302,7 +360,8 @@ class TaskDividerAgent(BaseAgent):
                             "response": cleaned_response,
                             "confidence": result.get("confidence", 0.7),
                             "sources": result.get("sources", []),
-                            "success": True
+                            "success": True,
+                            "detected_language": detected_language
                         })
                         logger.info(f"✅ {agent_type.value} a généré une réponse")
                     else:
@@ -448,13 +507,20 @@ class TaskDividerAgent(BaseAgent):
         
         return response.strip()
     
-    def _build_final_response(self, agent_responses: List[Dict[str, Any]], detected_agents: List[AgentType]) -> str:
+    async def _build_final_response(self, agent_responses: List[Dict[str, Any]], detected_agents: List[AgentType]) -> str:
         """Construit la réponse finale en agrégeant les réponses des agents avec priorité RAG"""
         successful_responses = [r for r in agent_responses if r["success"] and r["response"]]
         
         if not successful_responses:
             # Fallback vers Gemini si aucun agent n'a réussi
             return self._get_fallback_response()
+        
+        # 🌐 DÉTECTION DE LA LANGUE POUR TRADUCTION
+        detected_language = "fr"  # Défaut français
+        for response in successful_responses:
+            if "detected_language" in response:
+                detected_language = response["detected_language"]
+                break
         
         # Construction de la réponse
         parts = []
@@ -493,7 +559,30 @@ class TaskDividerAgent(BaseAgent):
                 
                 parts.append(f"**{confidence_emoji} {agent_name}** (confiance: {confidence:.1%}):\n{response['response']}\n")
         
-        return "\n".join(parts)
+        # Construction de la réponse finale
+        final_response = "\n".join(parts)
+        
+        # 🌐 TRADUCTION AUTOMATIQUE SI NÉCESSAIRE
+        if detected_language != "fr":
+            try:
+                from agents.multilingual_detector import MultilingualDetectorAgent
+                multilingual_agent = MultilingualDetectorAgent()
+                
+                translation_result = await multilingual_agent.translate_text(
+                    final_response, "fr", detected_language
+                )
+                
+                if translation_result.get("confidence", 0) > 0.5:
+                    final_response = translation_result["translated_text"]
+                    logger.info(f"🌐 Réponse traduite en {detected_language}")
+                else:
+                    logger.warning(f"🌐 Traduction de faible qualité, gardant la réponse en français")
+                    
+            except Exception as e:
+                logger.error(f"🌐 Erreur lors de la traduction: {e}")
+                # Garder la réponse en français en cas d'erreur
+        
+        return final_response
     
     def _get_fallback_response(self) -> str:
         """Génère une réponse de fallback avec Gemini"""
