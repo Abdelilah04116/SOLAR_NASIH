@@ -36,6 +36,7 @@ class SolarNasihWorkflow:
             from agents.certification_assistant import CertificationAssistantAgent
             from agents.document_generator import DocumentGeneratorAgent
             from agents.document_indexer import DocumentIndexerAgent
+            from agents.response_summarizer import ResponseSummarizerAgent
             self.agents = {
                 AgentType.TASK_DIVIDER: TaskDividerAgent(),
                 AgentType.TECHNICAL_ADVISOR: TechnicalAdvisorAgent(),
@@ -47,7 +48,8 @@ class SolarNasihWorkflow:
                 AgentType.COMMERCIAL_ASSISTANT: CommercialAssistantAgent(),
                 AgentType.CERTIFICATION_ASSISTANT: CertificationAssistantAgent(),
                 AgentType.DOCUMENT_GENERATOR: DocumentGeneratorAgent(),
-                AgentType.DOCUMENT_INDEXER: DocumentIndexerAgent()
+                AgentType.DOCUMENT_INDEXER: DocumentIndexerAgent(),
+                AgentType.RESPONSE_SUMMARIZER: ResponseSummarizerAgent()
             }
         except Exception as e:
             logger.error(f"Erreur lors de l'initialisation des agents: {e}")

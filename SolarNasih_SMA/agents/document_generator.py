@@ -130,9 +130,58 @@ class DocumentGeneratorAgent(BaseAgent):
         """
     
     def _generate_quote_document(self, quote_data: str) -> str:
-        """Génère un document de devis détaillé"""
-        quote_document = """
-📄 DEVIS PHOTOVOLTAÏQUE GÉNÉRÉ
+        """Génère un document de devis détaillé personnalisé"""
+        # Extraire les paramètres du message original si disponible
+        import re
+        
+        # Valeurs par défaut
+        puissance = "6 kWc"
+        nb_panneaux = "18"
+        puissance_panneau = "333Wc"  # 6000W / 18 panneaux
+        
+        # Essayer d'extraire les informations du quote_data ou du contexte
+        quote_lower = quote_data.lower()
+        
+        # Extraire la puissance
+        import re
+        puissance_match = re.search(r'(\d+(?:\.\d+)?)\s*kw?c?', quote_lower)
+        if puissance_match:
+            puissance_num = float(puissance_match.group(1))
+            puissance = f"{puissance_num} kWc"
+        
+        # Extraire le nombre de panneaux
+        panneaux_match = re.search(r'(\d+)\s*panneaux?', quote_lower)
+        if panneaux_match:
+            nb_panneaux_num = int(panneaux_match.group(1))
+            nb_panneaux = str(nb_panneaux_num)
+            puissance_panneau_num = puissance_num * 1000 / nb_panneaux_num
+            puissance_panneau = f"{puissance_panneau_num:.0f}Wc"
+        
+        # Calculs basés sur les paramètres
+        puissance_num = 6.0  # kWc
+        nb_panneaux_num = 18
+        puissance_panneau_num = puissance_num * 1000 / nb_panneaux_num  # Wc
+        
+        # Calculs financiers
+        prix_panneaux = nb_panneaux_num * puissance_panneau_num * 0.8  # ~0.8€/Wc
+        prix_onduleur = puissance_num * 200  # ~200€/kWc
+        prix_structure = puissance_num * 125  # ~125€/kWc
+        prix_cablage = puissance_num * 67  # ~67€/kWc
+        prix_installation = puissance_num * 400  # ~400€/kWc
+        
+        total_ht = prix_panneaux + prix_onduleur + prix_structure + prix_cablage + prix_installation
+        tva = total_ht * 0.20
+        total_ttc = total_ht + tva
+        prime_autoconsommation = puissance_num * 230  # ~230€/kWc pour 6kWc
+        prix_net = total_ttc - prime_autoconsommation
+        
+        # Production estimée
+        production_annuelle = puissance_num * 1200  # ~1200 kWh/kWc/an
+        economie_annuelle = production_annuelle * 0.15  # ~0.15€/kWh
+        retour_investissement = prix_net / economie_annuelle
+        
+        quote_document = f"""
+📄 DEVIS PHOTOVOLTAÏQUE DÉTAILLÉ
 
 ═══════════════════════════════════════════════════════
                     ENTREPRISE SOLAR PRO
@@ -143,14 +192,14 @@ class DocumentGeneratorAgent(BaseAgent):
 ═══════════════════════════════════════════════════════
 
 📅 DEVIS N°: DEV-2024-001                 Date: 15/01/2024
-👤 CLIENT: M. et Mme DUPONT
-🏠 ADRESSE: 456 Rue de la Paix, 69100 Villeurbanne
+👤 CLIENT: [À personnaliser]
+🏠 ADRESSE: [À personnaliser]
 
 ═══════════════════════════════════════════════════════
                       OBJET DU DEVIS
 ═══════════════════════════════════════════════════════
 
-Installation photovoltaïque 6 kWc en intégration au bâti
+Installation photovoltaïque {puissance} avec {nb_panneaux} panneaux
 Autoconsommation avec revente du surplus
 
 ═══════════════════════════════════════════════════════
@@ -158,44 +207,44 @@ Autoconsommation avec revente du surplus
 ═══════════════════════════════════════════════════════
 
 📦 MATÉRIEL FOURNI:
-• 15 panneaux photovoltaïques 400Wc          3,000.00€
+• {nb_panneaux} panneaux photovoltaïques {puissance_panneau}        {prix_panneaux:,.0f}.00€
   (Monocristallins, garantie 25 ans)
-• 1 onduleur string 6kW avec monitoring       1,200.00€
+• 1 onduleur string {puissance} avec monitoring        {prix_onduleur:,.0f}.00€
   (Garantie fabricant 10 ans)
-• Structure de fixation aluminium               750.00€
-• Câblage DC et protections                     400.00€
-• Coffret de protection AC                      200.00€
-• Compteur de production                        150.00€
-                                    Sous-total: 5,700.00€
+• Structure de fixation aluminium               {prix_structure:,.0f}.00€
+• Câblage DC et protections                     {prix_cablage:,.0f}.00€
+• Coffret de protection AC                      {prix_cablage/2:,.0f}.00€
+• Compteur de production                        {prix_cablage/4:,.0f}.00€
+                                    Sous-total: {prix_panneaux + prix_onduleur + prix_structure + prix_cablage + prix_cablage/2 + prix_cablage/4:,.0f}.00€
 
 🔧 INSTALLATION ET SERVICES:
-• Main d'œuvre pose et raccordement          2,400.00€
-• Démarches administratives complètes          500.00€
-• Mise en service et formation                  300.00€
+• Main d'œuvre pose et raccordement          {prix_installation:,.0f}.00€
+• Démarches administratives complètes          {prix_installation/5:,.0f}.00€
+• Mise en service et formation                  {prix_installation/10:,.0f}.00€
 • Garantie main d'œuvre 10 ans                   0.00€
-                                    Sous-total: 3,200.00€
+                                    Sous-total: {prix_installation + prix_installation/5 + prix_installation/10:,.0f}.00€
 
 ═══════════════════════════════════════════════════════
                       RÉCAPITULATIF
 ═══════════════════════════════════════════════════════
 
-💰 Total HT:                                8,900.00€
-🧾 TVA 20%:                                 1,780.00€
-💸 Total TTC:                              10,680.00€
+💰 Total HT:                                {total_ht:,.0f}.00€
+🧾 TVA 20%:                                 {tva:,.0f}.00€
+💸 Total TTC:                              {total_ttc:,.0f}.00€
 
 🎁 AIDES DÉDUITES:
-• Prime autoconsommation 6kWc               -1,380.00€
-💳 PRIX NET À PAYER:                        9,300.00€
+• Prime autoconsommation {puissance}               -{prime_autoconsommation:,.0f}.00€
+💳 PRIX NET À PAYER:                        {prix_net:,.0f}.00€
 
 ═══════════════════════════════════════════════════════
               PERFORMANCE ET RENTABILITÉ
 ═══════════════════════════════════════════════════════
 
-📈 Production annuelle estimée: 7,200 kWh
+📈 Production annuelle estimée: {production_annuelle:,.0f} kWh
 💡 Taux d'autoconsommation: 70%
-💰 Économies annuelles: 1,100€
-⏱️ Retour sur investissement: 8.5 ans
-🌍 CO2 évité: 2.3 tonnes/an
+💰 Économies annuelles: {economie_annuelle:,.0f}€
+⏱️ Retour sur investissement: {retour_investissement:.1f} ans
+🌍 CO2 évité: {production_annuelle * 0.0003:.1f} tonnes/an
 
 ═══════════════════════════════════════════════════════
                     CONDITIONS
@@ -206,6 +255,27 @@ Autoconsommation avec revente du surplus
 • Solde à la réception des travaux
 • Délai d'exécution: 4-6 semaines
 • Garantie décennale incluse
+
+═══════════════════════════════════════════════════════
+                    CARACTÉRISTIQUES TECHNIQUES
+═══════════════════════════════════════════════════════
+
+⚡ PUISSANCE INSTALLÉE: {puissance}
+📦 NOMBRE DE PANNEAUX: {nb_panneaux}
+🔌 TYPE ONDULEUR: String {puissance}
+🏠 TYPE INSTALLATION: Surimposition toiture
+📊 MONITORING: Application mobile incluse
+🔋 STOCKAGE: Non inclus (optionnel)
+
+═══════════════════════════════════════════════════════
+                    GARANTIES
+═══════════════════════════════════════════════════════
+
+🛡️ GARANTIES INCLUSES:
+• Panneaux: 25 ans produit + 25 ans performance
+• Onduleur: 10 ans fabricant
+• Installation: 10 ans main d'œuvre
+• Décennale: Dommages solidité/étanchéité
 
         """
         
@@ -565,6 +635,327 @@ QR Code documentation complète: [QR CODE]
         
         return tech_sheet
     
+    def _generate_maintenance_guide(self, guide_data: str) -> str:
+        """Génère un guide de maintenance préventive"""
+        maintenance_guide = """
+🔧 GUIDE DE MAINTENANCE PRÉVENTIVE
+    Installation Solaire Résidentielle
+
+═══════════════════════════════════════════════════════
+                    INTRODUCTION
+═══════════════════════════════════════════════════════
+
+Ce guide détaille les opérations de maintenance préventive
+nécessaires pour garantir le bon fonctionnement et la
+longévité de votre installation photovoltaïque.
+
+⚠️ IMPORTANT: La maintenance préventive est essentielle
+pour maintenir les performances et la garantie.
+
+═══════════════════════════════════════════════════════
+                    MAINTENANCE QUOTIDIENNE
+═══════════════════════════════════════════════════════
+
+📊 SURVEILLANCE PRODUCTION:
+• Vérifier la production quotidienne sur l'écran/mobile
+• Noter les anomalies (production nulle, erreurs)
+• Contrôler les indicateurs de fonctionnement
+
+🌤️ CONDITIONS MÉTÉO:
+• Surveiller l'impact des conditions météo
+• Noter les baisses de production normales (nuages, pluie)
+• Identifier les ombrages saisonniers
+
+═══════════════════════════════════════════════════════
+                   MAINTENANCE HEBDOMADAIRE
+═══════════════════════════════════════════════════════
+
+📈 ANALYSE PERFORMANCES:
+• Comparer production avec prévisions
+• Calculer le rendement moyen de la semaine
+• Identifier les tendances de performance
+
+🔍 INSPECTION VISUELLE (depuis le sol):
+• Vérifier l'état général des panneaux
+• Contrôler l'absence de débris ou feuilles
+• Observer les fixations et câblage
+
+═══════════════════════════════════════════════════════
+                  MAINTENANCE MENSUELLE
+═══════════════════════════════════════════════════════
+
+🧹 NETTOYAGE LÉGER:
+• Nettoyer les panneaux avec eau claire (si accessible)
+• Retirer les feuilles et débris légers
+• Vérifier l'état des joints d'étanchéité
+
+⚡ CONTRÔLE ÉLECTRIQUE:
+• Vérifier les voyants de l'onduleur
+• Contrôler l'absence de bruits anormaux
+• Tester les boutons de l'interface
+
+📱 MISE À JOUR LOGICIEL:
+• Vérifier les mises à jour du monitoring
+• Sauvegarder les données de production
+• Contrôler la connexion internet
+
+═══════════════════════════════════════════════════════
+                  MAINTENANCE TRIMESTRIELLE
+═══════════════════════════════════════════════════════
+
+🔧 INSPECTION TECHNIQUE:
+• Contrôler le serrage des connexions
+• Vérifier l'état des câbles et protections
+• Inspecter les boîtes de jonction
+
+🌡️ MESURES DE PERFORMANCE:
+• Mesurer la température des panneaux
+• Contrôler la tension et courant
+• Vérifier le rendement de l'onduleur
+
+📊 RAPPORT DE MAINTENANCE:
+• Documenter toutes les observations
+• Noter les anomalies détectées
+• Planifier les interventions nécessaires
+
+═══════════════════════════════════════════════════════
+                   MAINTENANCE SEMESTRIELLE
+═══════════════════════════════════════════════════════
+
+🧽 NETTOYAGE APPROFONDI:
+• Nettoyage professionnel des panneaux
+• Vérification de l'état de surface
+• Contrôle de l'absence de microfissures
+
+🔍 INSPECTION DÉTAILLÉE:
+• Contrôle complet de la structure
+• Vérification des fixations mécaniques
+• Inspection des joints d'étanchéité
+
+⚡ TESTS ÉLECTRIQUES:
+• Mesure de l'isolement
+• Contrôle des protections
+• Test de fonctionnement complet
+
+═══════════════════════════════════════════════════════
+                   MAINTENANCE ANNUELLE
+═══════════════════════════════════════════════════════
+
+🏢 INTERVENTION PROFESSIONNELLE:
+• Inspection complète par technicien qualifié
+• Nettoyage professionnel complet
+• Vérification de la conformité
+
+📋 RAPPORT ANNUEL:
+• Analyse complète des performances
+• Comparaison avec les prévisions
+• Recommandations d'optimisation
+
+🔧 MAINTENANCE PRÉVENTIVE:
+• Remplacement des pièces d'usure
+• Mise à jour du système de monitoring
+• Optimisation des paramètres
+
+═══════════════════════════════════════════════════════
+                    POINTS D'ATTENTION
+═══════════════════════════════════════════════════════
+
+⚠️ SÉCURITÉ:
+• Ne jamais monter sur le toit sans équipement
+• Éviter les interventions par temps humide
+• Respecter les consignes de sécurité
+
+🔌 ÉLECTRIQUE:
+• L'installation reste sous tension en journée
+• Ne pas toucher aux connexions électriques
+• Contacter un professionnel en cas de problème
+
+🌦️ MÉTÉO:
+• Éviter les interventions par mauvais temps
+• Tenir compte des conditions de vent
+• Respecter les consignes de sécurité
+
+═══════════════════════════════════════════════════════
+                    CONTACTS ET SUPPORT
+═══════════════════════════════════════════════════════
+
+📞 SERVICE APRÈS-VENTE:
+• Téléphone: 04.XX.XX.XX.XX
+• Email: sav@solarpro.fr
+• Intervention sous 48h
+
+🏢 ENTREPRISE:
+• SOLAR PRO SARL
+• RGE Qualibat 5911
+• Assurance décennale
+
+📱 MONITORING:
+• Application mobile: Solar Pro
+• Interface web: www.solarpro.fr/monitoring
+• Support technique 7j/7
+
+═══════════════════════════════════════════════════════
+Ce guide doit être conservé avec votre documentation
+d'installation et consulté régulièrement.
+═══════════════════════════════════════════════════════
+
+        """
+        
+        return maintenance_guide
+    
+    def _generate_training_document(self, training_data: str) -> str:
+        """Génère un document de formation"""
+        training_doc = """
+📚 PLAN DE FORMATION - ÉNERGIE SOLAIRE
+    Formation Générale - 60 minutes
+
+═══════════════════════════════════════════════════════
+                    INFORMATIONS GÉNÉRALES
+═══════════════════════════════════════════════════════
+
+📅 DURÉE: 60 minutes
+👥 PUBLIC: Général (particuliers, professionnels)
+🎯 NIVEAU: Débutant à intermédiaire
+📋 FORMAT: Présentation interactive + Q&A
+
+═══════════════════════════════════════════════════════
+                    OBJECTIFS PÉDAGOGIQUES
+═══════════════════════════════════════════════════════
+
+🎯 OBJECTIFS GÉNÉRAUX:
+• Comprendre les principes de l'énergie solaire
+• Connaître les technologies photovoltaïques
+• Maîtriser les aspects économiques et réglementaires
+• Appliquer les concepts à des projets concrets
+
+📊 OBJECTIFS SPÉCIFIQUES:
+• Expliquer le fonctionnement d'un panneau solaire
+• Calculer la production d'une installation
+• Évaluer la rentabilité d'un projet
+• Identifier les démarches administratives
+
+═══════════════════════════════════════════════════════
+                    PROGRAMME DÉTAILLÉ
+═══════════════════════════════════════════════════════
+
+⏰ SÉQUENCE 1: INTRODUCTION (10 min)
+• Présentation du formateur et des participants
+• Définition de l'énergie solaire photovoltaïque
+• Contexte énergétique et enjeux environnementaux
+• Questions et échanges
+
+⏰ SÉQUENCE 2: TECHNOLOGIES (15 min)
+• Principe de fonctionnement des panneaux
+• Types de cellules (mono/polycristallin, PERC)
+• Composants d'une installation (onduleur, câblage)
+• Évolutions technologiques récentes
+• Démonstration interactive
+
+⏰ SÉQUENCE 3: DIMENSIONNEMENT (15 min)
+• Facteurs influençant la production
+• Calcul de la puissance nécessaire
+• Optimisation de l'orientation et inclinaison
+• Outils de simulation disponibles
+• Exercice pratique
+
+⏰ SÉQUENCE 4: ASPECTS ÉCONOMIQUES (10 min)
+• Coûts d'investissement et d'exploitation
+• Aides et subventions disponibles
+• Calcul de rentabilité et ROI
+• Comparaison avec autres énergies
+• Exemples concrets
+
+⏰ SÉQUENCE 5: RÉGLEMENTATION (5 min)
+• Cadre réglementaire français
+• Démarches administratives
+• Normes et certifications
+• Garanties et assurances
+
+⏰ SÉQUENCE 6: CONCLUSION (5 min)
+• Synthèse des points clés
+• Questions-réponses
+• Ressources et contacts
+• Évaluation de la formation
+
+═══════════════════════════════════════════════════════
+                    MÉTHODES PÉDAGOGIQUES
+═══════════════════════════════════════════════════════
+
+🎯 APPROCHE:
+• Pédagogie active et participative
+• Alternance théorie/pratique
+• Exemples concrets et cas réels
+• Support visuel et interactif
+
+📊 OUTILS UTILISÉS:
+• Présentation PowerPoint
+• Simulateur en ligne
+• Échantillons de matériel
+• Documentation technique
+• Quiz interactif
+
+👥 INTERACTIONS:
+• Questions-réponses continues
+• Travaux pratiques en groupe
+• Partage d'expériences
+• Débats et échanges
+
+═══════════════════════════════════════════════════════
+                    SUPPORTS DE FORMATION
+═══════════════════════════════════════════════════════
+
+📋 DOCUMENTS FOURNIS:
+• Support de cours complet
+• Fiches techniques produits
+• Guide des démarches administratives
+• Liste des contacts utiles
+• Ressources en ligne
+
+🔗 RESSOURCES COMPLÉMENTAIRES:
+• Sites web de référence
+• Applications de simulation
+• Documentation technique
+• Vidéos explicatives
+• Forums et communautés
+
+═══════════════════════════════════════════════════════
+                    ÉVALUATION ET SUIVI
+═══════════════════════════════════════════════════════
+
+📊 ÉVALUATION:
+• Quiz de connaissances (10 questions)
+• Évaluation de la satisfaction
+• Suggestions d'amélioration
+• Attestation de participation
+
+📈 SUIVI POST-FORMATION:
+• Support technique 30 jours
+• Ressources en ligne accessibles
+• Newsletter technique
+• Sessions de perfectionnement
+
+═══════════════════════════════════════════════════════
+                    INFORMATIONS PRATIQUES
+═══════════════════════════════════════════════════════
+
+🏢 LIEU: Salle de formation Solar Pro
+📍 ADRESSE: 123 Avenue du Soleil, 69000 Lyon
+🚗 PARKING: Gratuit sur place
+☕ PAUSE: Café et rafraîchissements inclus
+
+📞 CONTACT: 04.XX.XX.XX.XX
+📧 EMAIL: formation@solarpro.fr
+🌐 WEB: www.solarpro.fr/formation
+
+═══════════════════════════════════════════════════════
+Cette formation s'inscrit dans notre démarche
+d'accompagnement et de professionnalisation.
+═══════════════════════════════════════════════════════
+
+        """
+        
+        return training_doc
+    
     def _customize_template(self, template_data: str) -> str:
         """Personnalise un template selon les besoins"""
         customization = """
@@ -664,7 +1055,9 @@ Chaque template peut être adapté selon:
             message_lower = state.current_message.lower()
             
             if any(word in message_lower for word in ["devis", "prix", "estimation", "tarif"]):
-                result = self._generate_quote_document("devis standard")
+                # Extraire les paramètres du message original
+                original_message = state.current_message
+                result = self._generate_quote_document(original_message)
             elif any(word in message_lower for word in ["rapport", "étude", "technique", "analyse"]):
                 result = self._create_technical_report("étude complète")
             elif any(word in message_lower for word in ["contrat", "engagement", "signature"]):
@@ -673,6 +1066,10 @@ Chaque template peut être adapté selon:
                 result = self._create_certificate("attestation installation")
             elif any(word in message_lower for word in ["fiche", "technique", "spécifications"]):
                 result = self._generate_technical_sheet("fiche équipement")
+            elif any(word in message_lower for word in ["maintenance", "entretien", "guide maintenance", "maintenance préventive"]):
+                result = self._generate_maintenance_guide("guide maintenance préventive")
+            elif any(word in message_lower for word in ["formation", "cours", "plan de cours"]) and "maintenance" not in message_lower:
+                result = self._generate_training_document("formation générale")
             elif any(word in message_lower for word in ["personnaliser", "adapter", "modifier"]):
                 result = self._customize_template("template personnalisé")
             else:

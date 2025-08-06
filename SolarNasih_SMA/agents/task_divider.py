@@ -55,7 +55,8 @@ class TaskDividerAgent(BaseAgent):
             ],
             AgentType.DOCUMENT_GENERATOR: [
                 r"générer", r"créer document", r"rapport", r"contrat", r"facture",
-                r"attestation", r"certificat", r"devis détaillé", r"pdf"
+                r"attestation", r"certificat", r"devis", r"devis détaillé", r"prix", 
+                r"estimation", r"tarif", r"pdf", r"document", r"génère", r"créer"
             ],
             AgentType.EDUCATIONAL_AGENT: [
                 r"apprendre", r"cours", r"formation", r"tutoriel", r"guide",
@@ -210,32 +211,52 @@ class TaskDividerAgent(BaseAgent):
             return AgentType.RAG_SYSTEM
     
     async def process(self, state: AgentState, agents_map: dict) -> dict:
-        """
-        Analyse la requête, détecte les intentions multiples, route vers les agents pertinents,
-        et construit une réponse utilisateur expliquant la division des tâches et agrégeant les réponses.
-        Si aucun agent ne peut répondre, utilise Gemini (LLM) pour générer une réponse intelligente.
-        """
-        from models.schemas import AgentState as AgentStateObj
-        
-        # Détection des agents appropriés
-        detected_agents = self._detect_relevant_agents(state.current_message)
-        
-        # Récupération des réponses des agents
-        agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
-        
-        # Construction de la réponse finale
-        final_response = await self._build_final_response(agent_responses, detected_agents)
-        
-        # Détermination de l'agent principal utilisé
-        primary_agent = detected_agents[0] if detected_agents else AgentType.TASK_DIVIDER
-        
-        return {
-            "response": final_response,
-            "confidence": self._calculate_overall_confidence(agent_responses),
-            "sources": self._collect_sources(agent_responses),
-            "agent_used": primary_agent.value,  # Utiliser l'agent principal détecté
-            "agent_responses": agent_responses  # Nouvelle propriété pour l'affichage
-        }
+        """Méthode principale de traitement - analyse et route les requêtes"""
+        try:
+            # Stocker la question originale pour l'agent résumeur
+            self.current_user_question = state.current_message
+            
+            # 1. Détecter les agents pertinents
+            detected_agents = self._detect_relevant_agents(state.current_message)
+            
+            if not detected_agents:
+                logger.warning("Aucun agent détecté, utilisation du RAG par défaut")
+                detected_agents = [AgentType.RAG_SYSTEM]
+            
+            # 2. Vérifier d'abord le RAG si disponible
+            rag_result = await self._check_rag_first(state.current_message)
+            
+            # 3. Obtenir les réponses des agents
+            agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
+            
+            # 4. Construire la réponse finale
+            final_response = await self._build_final_response(agent_responses, detected_agents)
+            
+            # 5. Calculer la confiance globale
+            overall_confidence = self._calculate_overall_confidence(agent_responses)
+            
+            # 6. Collecter les sources
+            sources = self._collect_sources(agent_responses)
+            
+            return {
+                "response": final_response,
+                "agent_used": "task_divider",
+                "confidence": overall_confidence,
+                "sources": sources,
+                "agent_responses": agent_responses,
+                "detected_agents": [agent.value for agent in detected_agents],
+                "rag_result": rag_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Erreur dans TaskDividerAgent: {e}")
+            return {
+                "response": f"Erreur lors du traitement: {str(e)}",
+                "agent_used": "task_divider",
+                "confidence": 0.0,
+                "error": str(e),
+                "sources": []
+            }
     
     def _detect_relevant_agents(self, message: str) -> List[AgentType]:
         """Détecte les agents pertinents pour la requête avec stratégie RAG-first"""
@@ -508,11 +529,10 @@ class TaskDividerAgent(BaseAgent):
         return response.strip()
     
     async def _build_final_response(self, agent_responses: List[Dict[str, Any]], detected_agents: List[AgentType]) -> str:
-        """Construit la réponse finale en agrégeant les réponses des agents avec priorité RAG"""
+        """Construit la réponse finale en format ChatGPT avec résumé automatique"""
         successful_responses = [r for r in agent_responses if r["success"] and r["response"]]
         
         if not successful_responses:
-            # Fallback vers Gemini si aucun agent n'a réussi
             return self._get_fallback_response()
         
         # 🌐 DÉTECTION DE LA LANGUE POUR TRADUCTION
@@ -522,45 +542,16 @@ class TaskDividerAgent(BaseAgent):
                 detected_language = response["detected_language"]
                 break
         
-        # Construction de la réponse
-        parts = []
+        # NOUVELLE APPROCHE : Réponse structurée style ChatGPT
+        # 1. Combiner les meilleures réponses
+        combined_response = self._combine_agent_responses(successful_responses)
         
-        # En-tête avec explication du routage
-        routing_explanation = "🔍 **Analyse de votre demande :**\n"
-        for agent_type in detected_agents:
-            routing_explanation += f"• {agent_type.value.replace('_', ' ').title()}\n"
-        parts.append(routing_explanation)
+        # 2. Utiliser l'agent résumeur pour formater la réponse
+        summarized_response = await self._summarize_with_agent(combined_response)
         
-        # Séparation des réponses RAG et spécialisées
-        rag_responses = [r for r in successful_responses if r["agent_type"] == AgentType.RAG_SYSTEM.value]
-        specialized_responses = [r for r in successful_responses if r["agent_type"] != AgentType.RAG_SYSTEM.value]
-        
-        # 1. 📚 Affichage des réponses RAG en premier (si disponibles)
-        if rag_responses:
-            parts.append("📚 **Informations de la base de connaissances :**")
-            for response in rag_responses:
-                confidence = response["confidence"]
-                rag_score = response.get("rag_score", 0.0)
-                confidence_emoji = "🟢" if confidence > 0.8 else "🟡" if confidence > 0.5 else "🔴"
-                
-                # Affichage avec score de similarité RAG
-                score_info = f" (similarité: {rag_score:.1%})" if rag_score > 0 else ""
-                parts.append(f"**{confidence_emoji} Base de connaissances** (confiance: {confidence:.1%}{score_info}):\n{response['response']}\n")
-        
-        # 2. 🤖 Affichage des réponses spécialisées
-        if specialized_responses:
-            parts.append("🤖 **Réponses des agents spécialisés :**")
-            for response in specialized_responses:
-                agent_name = response["agent_type"].replace("_", " ").title()
-                confidence = response["confidence"]
-                
-                # Ajout d'un indicateur de confiance
-                confidence_emoji = "🟢" if confidence > 0.8 else "🟡" if confidence > 0.5 else "🔴"
-                
-                parts.append(f"**{confidence_emoji} {agent_name}** (confiance: {confidence:.1%}):\n{response['response']}\n")
-        
-        # Construction de la réponse finale
-        final_response = "\n".join(parts)
+        # 3. Si l'agent résumeur échoue, utiliser le formatage automatique
+        if not summarized_response or "Erreur" in summarized_response:
+            summarized_response = self._format_chatgpt_style(combined_response)
         
         # 🌐 TRADUCTION AUTOMATIQUE SI NÉCESSAIRE
         if detected_language != "fr":
@@ -569,20 +560,181 @@ class TaskDividerAgent(BaseAgent):
                 multilingual_agent = MultilingualDetectorAgent()
                 
                 translation_result = await multilingual_agent.translate_text(
-                    final_response, "fr", detected_language
+                    summarized_response, "fr", detected_language
                 )
                 
                 if translation_result.get("confidence", 0) > 0.5:
-                    final_response = translation_result["translated_text"]
+                    summarized_response = translation_result["translated_text"]
                     logger.info(f"🌐 Réponse traduite en {detected_language}")
-                else:
-                    logger.warning(f"🌐 Traduction de faible qualité, gardant la réponse en français")
                     
             except Exception as e:
                 logger.error(f"🌐 Erreur lors de la traduction: {e}")
-                # Garder la réponse en français en cas d'erreur
         
-        return final_response
+        return summarized_response
+    
+    def _combine_agent_responses(self, responses: List[Dict[str, Any]]) -> str:
+        """Combine les réponses des agents en une seule réponse"""
+        if not responses:
+            return ""
+        
+        # Prendre la meilleure réponse (la plus pertinente)
+        best_response = max(responses, key=lambda x: x.get("confidence", 0))
+        
+        # Si c'est une réponse RAG de qualité, la prioriser
+        rag_responses = [r for r in responses if r["agent_type"] == AgentType.RAG_SYSTEM.value]
+        if rag_responses:
+            best_rag = max(rag_responses, key=lambda x: x.get("rag_score", 0))
+            if best_rag.get("rag_score", 0) > 0.6:
+                return best_rag["response"]
+        
+        return best_response["response"]
+    
+    async def _summarize_with_agent(self, response: str) -> str:
+        """Utilise l'agent résumeur pour formater la réponse"""
+        try:
+            from agents.response_summarizer import ResponseSummarizerAgent
+            from models.schemas import AgentState
+            
+            # Créer l'agent résumeur
+            summarizer = ResponseSummarizerAgent()
+            
+            # Récupérer la question originale depuis le contexte
+            user_question = ""
+            if hasattr(self, 'current_user_question'):
+                user_question = self.current_user_question
+            
+            # Créer l'état avec la réponse à résumer et la question originale
+            state = AgentState(
+                current_message=response,
+                detected_language="fr",
+                user_intent="",
+                agent_route=AgentType.RESPONSE_SUMMARIZER,
+                context={"user_question": user_question},
+                response="",
+                confidence=0.0,
+                sources=[],
+                processing_history=[]
+            )
+            
+            # Traiter avec l'agent résumeur
+            result = await summarizer.process(state)
+            
+            return result.get("response", response)
+            
+        except Exception as e:
+            logger.error(f"Erreur avec l'agent résumeur: {e}")
+            return response
+    
+    def _format_chatgpt_style(self, response: str) -> str:
+        """Formate la réponse en style ChatGPT automatiquement"""
+        try:
+            # Nettoyer la réponse
+            cleaned_response = self._clean_response(response)
+            
+            # Générer un résumé automatique
+            summary = self._generate_auto_summary(cleaned_response)
+            
+            # Extraire les points clés
+            key_points = self._extract_key_points(cleaned_response)
+            
+            # Formater en style ChatGPT
+            formatted_response = f"""**{summary}**
+
+{key_points}
+
+**Détails :**
+{cleaned_response[:300]}{'...' if len(cleaned_response) > 300 else ''}"""
+            
+            return formatted_response
+            
+        except Exception as e:
+            logger.error(f"Erreur formatage ChatGPT: {e}")
+            return response
+    
+    def _clean_response(self, response: str) -> str:
+        """Nettoie la réponse des métadonnées"""
+        if not response:
+            return ""
+        
+        # Supprimer les métadonnées et émojis
+        lines = response.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Ignorer les lignes avec métadonnées
+            if any(skip in line.lower() for skip in [
+                "confiance:", "similarité:", "score:", "agent:", "base de connaissances",
+                "🟢", "🟡", "🔴", "📚", "🤖", "🔍", "**analyse de votre demande**"
+            ]):
+                continue
+            
+            # Ignorer les lignes trop techniques ou verbeuses
+            if any(verbose in line.lower() for verbose in [
+                "calcul de production énergétique:", "estimation des économies annuelles:",
+                "calcul du retour sur investissement:", "dimensionnement optimal:",
+                "impact environnemental:", "pour calculer le roi", "méthode:", "facteurs:"
+            ]):
+                continue
+            
+            cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines)
+    
+    def _generate_auto_summary(self, response: str) -> str:
+        """Génère un résumé automatique"""
+        try:
+            # Extraire les informations principales
+            lines = response.split('\n')
+            summary_parts = []
+            
+            for line in lines[:3]:  # Prendre les 3 premières lignes utiles
+                if any(keyword in line.lower() for keyword in ['kwh', 'kwc', '€', 'ans', 'production', 'coût', 'prix']):
+                    summary_parts.append(line)
+            
+            if summary_parts:
+                return summary_parts[0][:100] + "..."
+            else:
+                return "Informations sur l'énergie solaire disponibles."
+                
+        except Exception as e:
+            logger.error(f"Erreur génération résumé auto: {e}")
+            return "Résumé de la réponse généré."
+    
+    def _extract_key_points(self, response: str) -> str:
+        """Extrait les points clés d'une réponse"""
+        try:
+            # Extraction automatique des points clés
+            lines = response.split('\n')
+            key_points = []
+            
+            # Chercher les lignes avec des données importantes
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Détecter les lignes avec des données chiffrées
+                if any(keyword in line.lower() for keyword in ['kwh', 'kwc', '€', 'ans', 'production', 'coût', 'prix', 'économie']):
+                    key_points.append(line)
+                elif len(line) > 10 and len(line) < 100 and not line.startswith('*'):
+                    key_points.append(line)
+            
+            # Limiter à 5 points maximum
+            if len(key_points) > 5:
+                key_points = key_points[:5]
+            
+            if key_points:
+                return "**Points clés :**\n" + "\n".join([f"• {point}" for point in key_points])
+            else:
+                return "**Informations principales :**\n" + response[:200] + "..."
+                
+        except Exception as e:
+            logger.error(f"Erreur extraction points clés: {e}")
+            return "**Informations :**\n" + response[:200] + "..."
     
     def _get_fallback_response(self) -> str:
         """Génère une réponse de fallback avec Gemini"""

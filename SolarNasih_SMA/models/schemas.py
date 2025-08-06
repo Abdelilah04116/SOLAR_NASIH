@@ -3,18 +3,20 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 class AgentType(str, Enum):
+    """Types d'agents disponibles dans le système"""
     TASK_DIVIDER = "task_divider"
-    DOCUMENT_INDEXER = "document_indexer"
-    VOICE_PROCESSOR = "voice_processor"
-    MULTILINGUAL_DETECTOR = "multilingual_detector"
+    RAG_SYSTEM = "rag_system"
     TECHNICAL_ADVISOR = "technical_advisor"
     ENERGY_SIMULATOR = "energy_simulator"
     REGULATORY_ASSISTANT = "regulatory_assistant"
-    EDUCATIONAL_AGENT = "educational_agent"
     COMMERCIAL_ASSISTANT = "commercial_assistant"
     CERTIFICATION_ASSISTANT = "certification_assistant"
     DOCUMENT_GENERATOR = "document_generator"
-    RAG_SYSTEM = "rag_system"
+    EDUCATIONAL_AGENT = "educational_agent"
+    VOICE_PROCESSOR = "voice_processor"
+    MULTILINGUAL_DETECTOR = "multilingual_detector"
+    DOCUMENT_INDEXER = "document_indexer"
+    RESPONSE_SUMMARIZER = "response_summarizer"
 
 class ChatRequest(BaseModel):
     message: str = Field(..., description="Message de l'utilisateur")

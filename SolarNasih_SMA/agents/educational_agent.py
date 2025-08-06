@@ -52,6 +52,7 @@ class EducationalAgent(BaseAgent):
             logger.info(f"  topic: {topic}")
             logger.info(f"  difficulty: {difficulty}")
             logger.info(f"  num_questions: {num_questions}")
+            
             # Base de questions par niveau et sujet
             question_bank = {
                 "basics": {
@@ -140,26 +141,53 @@ class EducationalAgent(BaseAgent):
             
             # Sélection des questions
             available_topics = list(question_bank.keys())
-            selected_topic = topic if topic in available_topics else "basics"
+            # Utiliser le topic fourni, même s'il n'est pas dans la banque
+            selected_topic = topic
+            logger.info(f"Selected topic: {selected_topic} (available: {available_topics})")
             
-            topic_questions = question_bank[selected_topic].get(difficulty, question_bank[selected_topic].get("beginner", []))
+            # Récupérer les questions de la banque si le topic existe
+            if selected_topic in available_topics:
+                topic_questions = question_bank[selected_topic].get(difficulty, question_bank[selected_topic].get("beginner", []))
+            else:
+                # Si le topic n'existe pas, utiliser les questions de "basics" mais avec le vrai topic
+                topic_questions = question_bank["basics"].get(difficulty, question_bank["basics"].get("beginner", []))
+                # Remplacer "basics" par le vrai topic dans les questions
+                for question in topic_questions:
+                    question["question"] = question["question"].replace("basics", selected_topic)
+                    question["explanation"] = question["explanation"].replace("basics", selected_topic)
             
-            # Génération du quiz
-            selected_questions = random.sample(
-                topic_questions, 
-                min(num_questions, len(topic_questions))
-            )
+            # IMPORTANT : Générer TOUJOURS le nombre exact de questions demandé
+            logger.info(f"User requested {num_questions} questions, will generate exactly that many")
             
-            # Si pas assez de questions, compléter avec des questions générées
-            if len(selected_questions) < num_questions:
-                logger.info(f"Not enough questions in bank ({len(selected_questions)}), generating {num_questions - len(selected_questions)} additional questions")
+            # Si pas assez de questions dans la banque, générer des questions supplémentaires
+            if len(topic_questions) < num_questions:
+                logger.info(f"Not enough questions in bank ({len(topic_questions)}), generating {num_questions - len(topic_questions)} additional questions")
                 additional_questions = self._generate_additional_questions(
-                    topic, difficulty, num_questions - len(selected_questions)
+                    topic, difficulty, num_questions - len(topic_questions)
                 )
                 logger.info(f"Generated {len(additional_questions)} additional questions")
-                selected_questions.extend(additional_questions)
+                topic_questions.extend(additional_questions)
             
-            logger.info(f"Final quiz has {len(selected_questions)} questions")
+            # S'assurer qu'on a exactement le nombre demandé de questions
+            if len(topic_questions) < num_questions:
+                # Si on n'a toujours pas assez, générer plus de questions
+                logger.info(f"Still need more questions. Current: {len(topic_questions)}, needed: {num_questions}")
+                more_questions = self._generate_additional_questions(
+                    topic, difficulty, num_questions - len(topic_questions)
+                )
+                topic_questions.extend(more_questions)
+            
+            # Sélectionner exactement le nombre demandé de questions
+            if len(topic_questions) >= num_questions:
+                # Mélanger et prendre les premières questions
+                random.shuffle(topic_questions)
+                selected_questions = topic_questions[:num_questions]
+            else:
+                # Si on n'a toujours pas assez (cas rare), utiliser ce qu'on a
+                logger.warning(f"Could only generate {len(topic_questions)} questions out of {num_questions} requested")
+                selected_questions = topic_questions
+            
+            logger.info(f"Final quiz has {len(selected_questions)} questions (requested: {num_questions})")
             
             quiz_data = {
                 "title": f"Quiz {topic.title()} - Niveau {difficulty}",
@@ -782,9 +810,12 @@ class EducationalAgent(BaseAgent):
         topic_questions = question_templates.get(topic, question_templates["basics"])
         difficulty_questions = topic_questions.get(difficulty, topic_questions.get("beginner", []))
         
-        # Si pas assez de questions spécifiques, utiliser des questions génériques
-        if len(difficulty_questions) < num_questions:
-            # Ajouter des questions génériques
+        # Ajouter toutes les questions spécifiques disponibles
+        additional_questions.extend(difficulty_questions)
+        
+        # Si on a encore besoin de plus de questions, utiliser des questions génériques
+        if len(additional_questions) < num_questions:
+            # Questions génériques extensibles
             generic_questions = [
                 {
                     "question": f"Quelle est l'importance de {topic} dans le domaine solaire ?",
@@ -877,33 +908,184 @@ class EducationalAgent(BaseAgent):
                     "explanation": f"Une formation spécialisée est recommandée pour maîtriser {topic}."
                 }
             ]
-            difficulty_questions.extend(generic_questions)
+            additional_questions.extend(generic_questions)
         
         # Si on a encore besoin de plus de questions, générer des questions dynamiques
-        if len(difficulty_questions) < num_questions:
-            remaining_questions = num_questions - len(difficulty_questions)
+        if len(additional_questions) < num_questions:
+            remaining_questions = num_questions - len(additional_questions)
             logger.info(f"Generating {remaining_questions} additional dynamic questions")
             
-            # Questions dynamiques basées sur le topic
+            # Questions dynamiques basées sur le topic avec variations
             dynamic_questions = []
             for i in range(remaining_questions):
-                question_num = i + 1
+                # Variations de questions pour éviter la répétition (SANS numéro)
+                question_variations = [
+                    f"Quel aspect de {topic} est le plus important ?",
+                    f"Quelle est la caractéristique principale de {topic} ?",
+                    f"Quel élément définit {topic} ?",
+                    f"Quelle est la fonction essentielle de {topic} ?",
+                    f"Quel facteur détermine le succès de {topic} ?",
+                    f"Quel est le rôle clé de {topic} ?",
+                    f"Quelle est l'importance de {topic} ?",
+                    f"Quel est l'impact de {topic} ?",
+                    f"Quelle est la valeur de {topic} ?",
+                    f"Quel est le principe de {topic} ?",
+                    f"Quelle est la méthode pour {topic} ?",
+                    f"Quel est le processus de {topic} ?",
+                    f"Quelle est la technologie de {topic} ?",
+                    f"Quel est le système de {topic} ?",
+                    f"Quelle est la stratégie pour {topic} ?"
+                ]
+                
+                question_text = question_variations[i % len(question_variations)]
+                
+                # Variations d'options pour éviter la répétition
+                option_variations = [
+                    [f"Aspect technique de {topic}", f"Aspect économique de {topic}", f"Aspect environnemental de {topic}", f"Aspect réglementaire de {topic}"],
+                    [f"Fonction technique de {topic}", f"Fonction économique de {topic}", f"Fonction sociale de {topic}", f"Fonction politique de {topic}"],
+                    [f"Principe technique de {topic}", f"Principe économique de {topic}", f"Principe écologique de {topic}", f"Principe légal de {topic}"],
+                    [f"Méthode technique de {topic}", f"Méthode économique de {topic}", f"Méthode environnementale de {topic}", f"Méthode administrative de {topic}"],
+                    [f"Processus technique de {topic}", f"Processus économique de {topic}", f"Processus écologique de {topic}", f"Processus réglementaire de {topic}"]
+                ]
+                
+                options = option_variations[i % len(option_variations)]
+                
                 dynamic_questions.append({
-                    "question": f"Question {question_num} sur {topic} : Quel aspect est le plus important ?",
-                    "options": [
-                        f"Aspect technique de {topic}",
-                        f"Aspect économique de {topic}",
-                        f"Aspect environnemental de {topic}",
-                        f"Aspect réglementaire de {topic}"
-                    ],
+                    "question": question_text,
+                    "options": options,
                     "correct": random.randint(0, 3),
                     "explanation": f"Cette question teste la compréhension des différents aspects de {topic}."
                 })
             
-            difficulty_questions.extend(dynamic_questions)
+            additional_questions.extend(dynamic_questions)
         
-        # Retourner le nombre demandé de questions
-        return difficulty_questions[:num_questions]
+        # S'assurer qu'on a exactement le nombre demandé de questions
+        if len(additional_questions) < num_questions:
+            logger.warning(f"Could only generate {len(additional_questions)} questions out of {num_questions} requested")
+            # Générer plus de questions dynamiques pour atteindre le nombre demandé
+            remaining = num_questions - len(additional_questions)
+            logger.info(f"Generating {remaining} more dynamic questions to reach {num_questions}")
+            
+            # Générer des questions supplémentaires avec des variations
+            for i in range(remaining):
+                # Créer des questions avec des variations infinies (SANS numéro dans la question)
+                variations = [
+                    f"Quel aspect de {topic} est le plus important ?",
+                    f"Quelle caractéristique définit {topic} ?",
+                    f"Quel élément est essentiel pour {topic} ?",
+                    f"Quelle fonction est primordiale dans {topic} ?",
+                    f"Quel facteur détermine le succès de {topic} ?",
+                    f"Quel rôle joue {topic} dans le solaire ?",
+                    f"Quelle importance a {topic} ?",
+                    f"Quel impact a {topic} ?",
+                    f"Quelle valeur apporte {topic} ?",
+                    f"Quel principe guide {topic} ?",
+                    f"Quelle méthode utilise {topic} ?",
+                    f"Quel processus suit {topic} ?",
+                    f"Quelle technologie emploie {topic} ?",
+                    f"Quel système gère {topic} ?",
+                    f"Quelle stratégie adopte {topic} ?",
+                    f"Quel mécanisme anime {topic} ?",
+                    f"Quel dispositif contrôle {topic} ?",
+                    f"Quel équipement utilise {topic} ?",
+                    f"Quel outil nécessite {topic} ?",
+                    f"Quel composant caractérise {topic} ?"
+                ]
+                
+                question_text = variations[i % len(variations)]
+                
+                # Variations d'options
+                option_sets = [
+                    [f"Aspect technique de {topic}", f"Aspect économique de {topic}", f"Aspect environnemental de {topic}", f"Aspect réglementaire de {topic}"],
+                    [f"Fonction technique de {topic}", f"Fonction économique de {topic}", f"Fonction sociale de {topic}", f"Fonction politique de {topic}"],
+                    [f"Principe technique de {topic}", f"Principe économique de {topic}", f"Principe écologique de {topic}", f"Principe légal de {topic}"],
+                    [f"Méthode technique de {topic}", f"Méthode économique de {topic}", f"Méthode environnementale de {topic}", f"Méthode administrative de {topic}"],
+                    [f"Processus technique de {topic}", f"Processus économique de {topic}", f"Processus écologique de {topic}", f"Processus réglementaire de {topic}"],
+                    [f"Technologie avancée de {topic}", f"Technologie standard de {topic}", f"Technologie émergente de {topic}", f"Technologie traditionnelle de {topic}"],
+                    [f"Système automatisé de {topic}", f"Système manuel de {topic}", f"Système hybride de {topic}", f"Système intelligent de {topic}"],
+                    [f"Stratégie optimale de {topic}", f"Stratégie alternative de {topic}", f"Stratégie innovante de {topic}", f"Stratégie conventionnelle de {topic}"],
+                    [f"Mécanisme principal de {topic}", f"Mécanisme secondaire de {topic}", f"Mécanisme auxiliaire de {topic}", f"Mécanisme de secours de {topic}"],
+                    [f"Dispositif de contrôle de {topic}", f"Dispositif de mesure de {topic}", f"Dispositif de sécurité de {topic}", f"Dispositif de régulation de {topic}"]
+                ]
+                
+                options = option_sets[i % len(option_sets)]
+                
+                additional_questions.append({
+                    "question": question_text,
+                    "options": options,
+                    "correct": random.randint(0, 3),
+                    "explanation": f"Cette question teste la compréhension approfondie de {topic}."
+                })
+        
+        # S'assurer qu'on a exactement le nombre demandé de questions
+        if len(additional_questions) < num_questions:
+            logger.warning(f"Generated {len(additional_questions)} questions, need {num_questions}. Generating more...")
+            # Générer plus de questions pour atteindre le nombre demandé
+            remaining = num_questions - len(additional_questions)
+            
+            # Générer des questions supplémentaires avec des variations infinies
+            for i in range(remaining):
+                # Créer des questions avec des variations infinies
+                variations = [
+                    f"Quel aspect de {topic} est le plus important ?",
+                    f"Quelle caractéristique définit {topic} ?",
+                    f"Quel élément est essentiel pour {topic} ?",
+                    f"Quelle fonction est primordiale dans {topic} ?",
+                    f"Quel facteur détermine le succès de {topic} ?",
+                    f"Quel rôle joue {topic} dans le solaire ?",
+                    f"Quelle importance a {topic} ?",
+                    f"Quel impact a {topic} ?",
+                    f"Quelle valeur apporte {topic} ?",
+                    f"Quel principe guide {topic} ?",
+                    f"Quelle méthode utilise {topic} ?",
+                    f"Quel processus suit {topic} ?",
+                    f"Quelle technologie emploie {topic} ?",
+                    f"Quel système gère {topic} ?",
+                    f"Quelle stratégie adopte {topic} ?",
+                    f"Quel mécanisme anime {topic} ?",
+                    f"Quel dispositif contrôle {topic} ?",
+                    f"Quel équipement utilise {topic} ?",
+                    f"Quel outil nécessite {topic} ?",
+                    f"Quel composant caractérise {topic} ?",
+                    f"Quel élément structure {topic} ?",
+                    f"Quelle fonction anime {topic} ?",
+                    f"Quel processus gère {topic} ?",
+                    f"Quelle méthode optimise {topic} ?",
+                    f"Quel système contrôle {topic} ?",
+                    f"Quelle technologie améliore {topic} ?",
+                    f"Quel dispositif mesure {topic} ?",
+                    f"Quel équipement protège {topic} ?",
+                    f"Quel outil analyse {topic} ?"
+                ]
+                
+                question_text = variations[i % len(variations)]
+                
+                # Variations d'options
+                option_sets = [
+                    [f"Aspect technique de {topic}", f"Aspect économique de {topic}", f"Aspect environnemental de {topic}", f"Aspect réglementaire de {topic}"],
+                    [f"Fonction technique de {topic}", f"Fonction économique de {topic}", f"Fonction sociale de {topic}", f"Fonction politique de {topic}"],
+                    [f"Principe technique de {topic}", f"Principe économique de {topic}", f"Principe écologique de {topic}", f"Principe légal de {topic}"],
+                    [f"Méthode technique de {topic}", f"Méthode économique de {topic}", f"Méthode environnementale de {topic}", f"Méthode administrative de {topic}"],
+                    [f"Processus technique de {topic}", f"Processus économique de {topic}", f"Processus écologique de {topic}", f"Processus réglementaire de {topic}"],
+                    [f"Technologie avancée de {topic}", f"Technologie standard de {topic}", f"Technologie émergente de {topic}", f"Technologie traditionnelle de {topic}"],
+                    [f"Système automatisé de {topic}", f"Système manuel de {topic}", f"Système hybride de {topic}", f"Système intelligent de {topic}"],
+                    [f"Stratégie optimale de {topic}", f"Stratégie alternative de {topic}", f"Stratégie innovante de {topic}", f"Stratégie conventionnelle de {topic}"],
+                    [f"Mécanisme principal de {topic}", f"Mécanisme secondaire de {topic}", f"Mécanisme auxiliaire de {topic}", f"Mécanisme de secours de {topic}"],
+                    [f"Dispositif de contrôle de {topic}", f"Dispositif de mesure de {topic}", f"Dispositif de sécurité de {topic}", f"Dispositif de régulation de {topic}"]
+                ]
+                
+                options = option_sets[i % len(option_sets)]
+                
+                additional_questions.append({
+                    "question": question_text,
+                    "options": options,
+                    "correct": random.randint(0, 3),
+                    "explanation": f"Cette question teste la compréhension approfondie de {topic}."
+                })
+        
+        # Retourner exactement le nombre demandé de questions
+        logger.info(f"Final count: {len(additional_questions)} questions generated for {num_questions} requested")
+        return additional_questions[:num_questions]
     
     def _create_generic_lesson_plan(self, subject: str, audience: str, duration: int) -> Dict[str, Any]:
         """Crée un plan de cours générique"""
@@ -1278,14 +1460,17 @@ class EducationalAgent(BaseAgent):
     
     def _extract_topic(self, user_input: str) -> str:
         """Extrait le sujet de la demande"""
-        topics = ["photovoltaique", "installation", "economie", "reglementation", "maintenance"]
+        topics = ["photovoltaique", "installation", "economie", "reglementation", "maintenance", "énergie solaire", "solaire", "panneau", "photovoltaïque"]
         text = user_input.lower()
         
         for topic in topics:
             if topic in text or any(word in text for word in topic.split()):
+                logger.info(f"Extracted topic: {topic}")
                 return topic
         
-        return "basics"
+        # Si aucun topic spécifique trouvé, utiliser "énergie solaire" au lieu de "basics"
+        logger.info("No specific topic found, using default: énergie solaire")
+        return "énergie solaire"
     
     def _extract_difficulty(self, user_input: str) -> str:
         """Extrait le niveau de difficulté"""
@@ -1313,28 +1498,38 @@ class EducationalAgent(BaseAgent):
         """Extrait le nombre de questions souhaité"""
         import re
         
-        # Patterns pour détecter les nombres de questions
-        patterns = [
+        # D'abord, chercher tous les nombres dans le texte
+        all_numbers = re.findall(r'\d+', user_input)
+        logger.info(f"All numbers found in text: {all_numbers}")
+        
+        # Patterns spécifiques pour détecter les nombres de questions
+        specific_patterns = [
             r'(\d+)\s*questions?',  # "5 questions", "10 question"
             r'(\d+)\s*quiz',        # "5 quiz"
             r'(\d+)\s*test',        # "5 test"
             r'(\d+)\s*exercices?',  # "5 exercices"
             r'(\d+)\s*items?',      # "5 items"
-            r'(\d+)',               # Juste un nombre
         ]
         
         text = user_input.lower()
         
-        for pattern in patterns:
+        # Chercher d'abord les patterns spécifiques
+        for pattern in specific_patterns:
             match = re.search(pattern, text)
             if match:
                 num = int(match.group(1))
-                logger.info(f"Extracted number of questions: {num} from pattern '{pattern}'")
-                return min(max(num, 1), 50)  # Entre 1 et 50 questions
+                logger.info(f"Extracted number of questions: {num} from specific pattern '{pattern}'")
+                return max(num, 1)  # Minimum 1, pas de maximum
+        
+        # Si aucun pattern spécifique trouvé, prendre le plus grand nombre
+        if all_numbers:
+            max_num = max(int(num) for num in all_numbers)
+            logger.info(f"Using largest number found: {max_num}")
+            return max(max_num, 1)  # Minimum 1, pas de maximum
         
         # Si aucun nombre trouvé, chercher des mots-clés
         if any(word in text for word in ["beaucoup", "plusieurs", "multiple", "many", "several"]):
-            return 15
+            return 20
         elif any(word in text for word in ["peu", "quelques", "few", "some"]):
             return 5
         else:
