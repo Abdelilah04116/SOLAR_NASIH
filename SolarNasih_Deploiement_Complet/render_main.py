@@ -180,7 +180,27 @@ async def frontend_proxy(request: Request, path: str = ""):
             response = await client.get(url)
             return response
     except Exception as e:
-        return {"error": f"Frontend service not available: {str(e)}"}
+        return HTMLResponse("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Frontend Non Disponible</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
+                .error { color: #d32f2f; background: #ffebee; padding: 20px; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <h1>⚠️ Frontend Non Disponible</h1>
+            <div class="error">
+                <p>Le frontend React n'est pas disponible pour le moment.</p>
+                <p>Erreur: """ + str(e) + """</p>
+                <p>Vous pouvez toujours utiliser les APIs SMA et RAG directement.</p>
+            </div>
+            <p><a href="/">← Retour à l'accueil</a></p>
+        </body>
+        </html>
+        """)
 
 def start_sma_service():
     """Démarre le service SMA"""

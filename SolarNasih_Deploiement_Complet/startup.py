@@ -31,11 +31,16 @@ def start_background_services():
     
     # Démarrer Frontend
     def start_frontend():
-        os.chdir('SolarNasih_Template')
-        if not os.path.exists('node_modules'):
-            subprocess.run(['npm', 'install'], check=True)
-        subprocess.Popen(['npm', 'run', 'preview', '--', '--host', '0.0.0.0', '--port', '3000'])
-        os.chdir('..')
+        try:
+            os.chdir('SolarNasih_Template')
+            if not os.path.exists('node_modules'):
+                subprocess.run(['npm', 'install'], check=True)
+            subprocess.Popen(['npm', 'run', 'preview', '--', '--host', '0.0.0.0', '--port', '3000'])
+            os.chdir('..')
+        except Exception as e:
+            print(f"⚠️ Erreur lors du démarrage du frontend: {e}")
+            print("🚀 Le serveur principal continuera sans le frontend")
+            os.chdir('..')
     
     # Démarrer les services en parallèle
     threading.Thread(target=start_sma, daemon=True).start()
