@@ -1,0 +1,38 @@
+buildpacks:
+  - url: heroku/python
+  - url: heroku/nodejs
+
+formation:
+  web:
+    quantity: 1
+    size: basic
+
+env:
+  PYTHON_VERSION: 3.11.0
+  NODE_VERSION: 18
+  ENVIRONMENT: production
+
+scripts:
+  postdeploy:
+    - echo "Déploiement terminé"
+
+# Configuration pour les applications multiples
+# Note: Heroku nécessite des applications séparées pour chaque service
+
+# Application 1: SMA
+# heroku create solar-nasih-sma
+# heroku config:set GEMINI_API_KEY=votre_clé
+# heroku config:set TAVILY_API_KEY=votre_clé
+# heroku config:set ENVIRONMENT=production
+
+# Application 2: RAG  
+# heroku create solar-nasih-rag
+# heroku config:set OPENAI_API_KEY=votre_clé
+# heroku config:set ANTHROPIC_API_KEY=votre_clé
+# heroku config:set ENVIRONMENT=production
+
+# Application 3: Frontend
+# heroku create solar-nasih-frontend
+# heroku config:set NODE_ENV=production
+# heroku config:set VITE_SMA_API_URL=https://solar-nasih-sma.herokuapp.com
+# heroku config:set VITE_RAG_API_URL=https://solar-nasih-rag.herokuapp.com

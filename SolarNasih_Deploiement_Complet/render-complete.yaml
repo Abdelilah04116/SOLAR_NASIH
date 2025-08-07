@@ -1,0 +1,81 @@
+services:
+  # Service SMA (Solar Management Assistant)
+  - type: web
+    name: solar-nasih-sma
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r SolarNasih_Deploiement_Complet/requirements_sma.txt
+    startCommand: |
+      cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: REDIS_URL
+        value: redis://solar-nasih-redis:6379
+
+  # Service RAG (Retrieval-Augmented Generation)
+  - type: web
+    name: solar-nasih-rag
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r SolarNasih_Deploiement_Complet/requirements_rag.txt
+    startCommand: |
+      cd SolarNasih_RAG && uvicorn api_simple:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: QDRANT_URL
+        value: http://solar-nasih-qdrant:6333
+      - key: REDIS_URL
+        value: redis://solar-nasih-redis:6379
+
+  # Service Frontend (React/TypeScript)
+  - type: web
+    name: solar-nasih-frontend
+    env: node
+    plan: free
+    buildCommand: |
+      cd SolarNasih_Template && npm install && npm run build
+    startCommand: |
+      cd SolarNasih_Template && npm run preview -- --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: NODE_ENV
+        value: production
+      - key: VITE_SMA_API_URL
+        value: https://solar-nasih-sma.onrender.com
+      - key: VITE_RAG_API_URL
+        value: https://solar-nasih-rag.onrender.com
+
+  # Service Redis (Cache)
+  - type: redis
+    name: solar-nasih-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # Service Qdrant (Vector Database)
+  - type: web
+    name: solar-nasih-qdrant
+    env: docker
+    plan: free
+    dockerfilePath: ./SolarNasih_Deploiement_Complet/Dockerfile.qdrant
+    envVars:
+      - key: QDRANT__SERVICE__HTTP_PORT
+        value: 6333
+      - key: QDRANT__SERVICE__GRPC_PORT
+        value: 6334

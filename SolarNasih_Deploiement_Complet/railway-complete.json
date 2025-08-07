@@ -1,0 +1,92 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "ENVIRONMENT": "production",
+        "PYTHON_VERSION": "3.11.0",
+        "NODE_VERSION": "18"
+      }
+    }
+  },
+  "services": [
+    {
+      "name": "solar-nasih-sma",
+      "source": {
+        "type": "GITHUB",
+        "repo": "your-username/solar-nasih",
+        "branch": "main"
+      },
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "pip install -r SolarNasih_Deploiement_Complet/requirements_sma.txt"
+      },
+      "deploy": {
+        "startCommand": "cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT"
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "GEMINI_API_KEY": "",
+            "TAVILY_API_KEY": "",
+            "ENVIRONMENT": "production"
+          }
+        }
+      }
+    },
+    {
+      "name": "solar-nasih-rag",
+      "source": {
+        "type": "GITHUB",
+        "repo": "your-username/solar-nasih",
+        "branch": "main"
+      },
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "pip install -r SolarNasih_Deploiement_Complet/requirements_rag.txt"
+      },
+      "deploy": {
+        "startCommand": "cd SolarNasih_RAG && uvicorn api_simple:app --host 0.0.0.0 --port $PORT"
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "OPENAI_API_KEY": "",
+            "ANTHROPIC_API_KEY": "",
+            "ENVIRONMENT": "production"
+          }
+        }
+      }
+    },
+    {
+      "name": "solar-nasih-frontend",
+      "source": {
+        "type": "GITHUB",
+        "repo": "your-username/solar-nasih",
+        "branch": "main"
+      },
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "cd SolarNasih_Template && npm install && npm run build"
+      },
+      "deploy": {
+        "startCommand": "cd SolarNasih_Template && npm run preview -- --host 0.0.0.0 --port $PORT"
+      },
+      "environments": {
+        "production": {
+          "variables": {
+            "NODE_ENV": "production"
+          }
+        }
+      }
+    }
+  ]
+}

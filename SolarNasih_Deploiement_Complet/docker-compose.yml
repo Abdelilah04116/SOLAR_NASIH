@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Base de données vectorielle Qdrant pour RAG
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: solar-nasih-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+
+  # Cache Redis pour RAG et SMA
+  redis:
+    image: redis:7-alpine
+    container_name: solar-nasih-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+
+  # Service SMA (Solar Management Assistant)
+  solar-nasih-sma:
+    build:
+      context: ../SolarNasih_SMA
+      dockerfile: ../SolarNasih_Deploiement_Complet/Dockerfile.sma
+    container_name: solar-nasih-sma
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../SolarNasih_SMA/logs:/app/logs
+      - ../SolarNasih_SMA/static:/app/static
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - ENVIRONMENT=production
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Service RAG (Retrieval-Augmented Generation)
+  solar-nasih-rag:
+    build:
+      context: ../SolarNasih_RAG
+      dockerfile: ../SolarNasih_Deploiement_Complet/Dockerfile.rag
+    container_name: solar-nasih-rag
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../SolarNasih_RAG/data:/app/data
+      - ../SolarNasih_RAG/logs:/app/logs
+      - ../SolarNasih_RAG/models:/app/models
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENVIRONMENT=production
+    depends_on:
+      - qdrant
+      - redis
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Service Frontend (React/TypeScript)
+  solar-nasih-frontend:
+    build:
+      context: ../SolarNasih_Template
+      dockerfile: ../SolarNasih_Deploiement_Complet/Dockerfile.frontend
+    container_name: solar-nasih-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - SMA_API_URL=http://solar-nasih-sma:8000
+      - RAG_API_URL=http://solar-nasih-rag:8001
+      - NODE_ENV=production
+    depends_on:
+      - solar-nasih-sma
+      - solar-nasih-rag
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: solar-nasih-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - solar-nasih-frontend
+      - solar-nasih-sma
+      - solar-nasih-rag
+    networks:
+      - solar-nasih-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  qdrant_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  solar-nasih-network:
+    driver: bridge
