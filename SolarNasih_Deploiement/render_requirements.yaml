@@ -3,7 +3,7 @@ services:
     name: solar-nasih-api
     env: python
     buildCommand: pip install -r requirements_super_simple.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: GEMINI_API_KEY
         sync: false

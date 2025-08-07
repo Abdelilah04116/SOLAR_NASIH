@@ -23,7 +23,7 @@ def print_instructions():
     print("pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain python-dotenv requests")
     print()
     print("🚀 START COMMAND :")
-    print("uvicorn main:app --host 0.0.0.0 --port $PORT")
+    print("cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT")
     print()
     print("⚙️ VARIABLES D'ENVIRONNEMENT :")
     print("PYTHON_VERSION=3.11.0")
