@@ -127,6 +127,20 @@ def install_node_dependencies():
             # Essayer le build à nouveau
             subprocess.run(['npm', 'run', 'build'], check=True)
         
+        # Créer un script de démarrage pour le frontend
+        print("📝 Création du script de démarrage frontend...")
+        dev_script = """#!/bin/bash
+# Script de démarrage pour le frontend
+cd /opt/render/project/src/SolarNasih_Template
+if [ ! -d "node_modules" ]; then
+    npm install
+fi
+npm run dev -- --host 0.0.0.0 --port 3000
+"""
+        with open('start_frontend.sh', 'w') as f:
+            f.write(dev_script)
+        os.chmod('start_frontend.sh', 0o755)
+        
         # Revenir au répertoire racine
         os.chdir('..')
         

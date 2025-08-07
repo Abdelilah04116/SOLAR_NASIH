@@ -30,12 +30,90 @@ app = FastAPI(title="SolarNasih Unified", version="1.0.0")
 
 @app.get("/")
 async def root():
-    """Page d'accueil avec liens vers tous les services"""
+    """Redirection automatique vers le frontend principal"""
+    try:
+        # Essayer de rediriger vers le frontend
+        frontend_url = f"http://localhost:{FRONTEND_PORT}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(frontend_url, timeout=2.0)
+            if response.status_code == 200:
+                return RedirectResponse(url=f"/frontend/", status_code=302)
+    except:
+        pass
+    
+    # Si le frontend n'est pas disponible, afficher une page de chargement
     return HTMLResponse("""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>SolarNasih - Services Unifiés</title>
+        <title>SolarNasih - Chargement...</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .loading-container {
+                text-align: center;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 40px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+            }
+            .spinner {
+                border: 4px solid rgba(255, 255, 255, 0.3);
+                border-top: 4px solid #fff;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            h1 {
+                margin-bottom: 20px;
+                font-size: 2em;
+            }
+            .redirect-text {
+                margin-top: 20px;
+                font-size: 1.1em;
+            }
+        </style>
+        <script>
+            // Redirection automatique vers le frontend
+            setTimeout(function() {
+                window.location.href = '/frontend/';
+            }, 2000);
+        </script>
+    </head>
+    <body>
+        <div class="loading-container">
+            <h1>🚀 SolarNasih</h1>
+            <div class="spinner"></div>
+            <p>Chargement de l'application...</p>
+            <p class="redirect-text">Redirection automatique dans 2 secondes...</p>
+        </div>
+    </body>
+    </html>
+    """)
+
+@app.get("/admin")
+async def admin_panel():
+    """Page d'administration avec statut des services"""
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SolarNasih - Administration</title>
         <style>
             body { 
                 font-family: Arial, sans-serif; 
@@ -86,11 +164,20 @@ async def root():
                 background: rgba(0, 255, 0, 0.2);
                 border-radius: 5px;
             }
+            .back-link {
+                text-align: center;
+                margin-top: 20px;
+            }
+            .back-link a {
+                color: #ffd700;
+                text-decoration: none;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🚀 SolarNasih - Services Unifiés</h1>
+            <h1>🚀 SolarNasih - Administration</h1>
             
             <div class="status">
                 <h3>✅ Tous les services sont opérationnels</h3>
@@ -122,6 +209,10 @@ async def root():
                 <p><strong>Port SMA:</strong> """ + SMA_PORT + """</p>
                 <p><strong>Port RAG:</strong> """ + RAG_PORT + """</p>
                 <p><strong>Port Frontend:</strong> """ + FRONTEND_PORT + """</p>
+            </div>
+            
+            <div class="back-link">
+                <a href="/">← Retour à l'application principale</a>
             </div>
         </div>
     </body>

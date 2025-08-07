@@ -35,7 +35,19 @@ def start_background_services():
             os.chdir('SolarNasih_Template')
             if not os.path.exists('node_modules'):
                 subprocess.run(['npm', 'install'], check=True)
-            subprocess.Popen(['npm', 'run', 'preview', '--', '--host', '0.0.0.0', '--port', '3000'])
+            # Essayer d'abord le serveur de développement
+            try:
+                subprocess.Popen(['npm', 'run', 'dev', '--', '--host', '0.0.0.0', '--port', '3000'])
+                print("✅ Frontend démarré en mode développement")
+            except:
+                # Si dev ne fonctionne pas, essayer preview
+                try:
+                    subprocess.Popen(['npm', 'run', 'preview', '--', '--host', '0.0.0.0', '--port', '3000'])
+                    print("✅ Frontend démarré en mode preview")
+                except:
+                    # Si preview ne fonctionne pas, essayer le serveur de build
+                    subprocess.Popen(['npx', 'serve', 'dist', '-s', '-l', '3000'])
+                    print("✅ Frontend démarré avec serve")
             os.chdir('..')
         except Exception as e:
             print(f"⚠️ Erreur lors du démarrage du frontend: {e}")
