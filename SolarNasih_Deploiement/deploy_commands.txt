@@ -2,7 +2,7 @@
 # Copiez ces commandes dans la configuration Render
 
 # BUILD COMMAND (à copier dans Render) :
-pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain langchain-google-genai python-dotenv requests
+pip install -r requirements.txt
 
 # START COMMAND (à copier dans Render) :
 cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT

@@ -20,7 +20,7 @@ def print_instructions():
     print("4. Configurez comme suit :")
     print()
     print("🔧 BUILD COMMAND :")
-    print("pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain langchain-google-genai python-dotenv requests")
+    print("pip install -r requirements.txt")
     print()
     print("🚀 START COMMAND :")
     print("cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT")
@@ -41,16 +41,29 @@ def create_temp_files():
     
     # Créer un requirements.txt temporaire
     requirements_content = """# Requirements temporaire pour déploiement
-fastapi
-uvicorn
-pydantic
-google-generativeai
-tavily-python
-langgraph
-langchain
-langchain-google-genai
-python-dotenv
-requests
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+httpx==0.25.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+langchain==0.1.0
+langgraph==0.0.26
+langchain-google-genai==0.0.6
+google-generativeai==0.3.2
+tavily-python==0.3.0
+python-dotenv==1.0.0
+jinja2==3.1.2
+requests==2.31.0
+PyYAML==6.0.1
+speechrecognition==3.10.0
+gtts==2.4.0
+python-docx==1.1.0
+openpyxl==3.1.2
+fpdf2==2.7.6
+markdown==3.5.1
+beautifulsoup4==4.12.2
+streamlit==1.28.0
 """
     
     # Créer un runtime.txt temporaire
