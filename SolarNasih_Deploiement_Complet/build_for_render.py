@@ -177,7 +177,7 @@ def create_startup_script():
     """Crée un script de démarrage pour Render"""
     print("🚀 Création du script de démarrage...")
     
-    startup_content = """#!/usr/bin/env python3
+    startup_content = '''#!/usr/bin/env python3
 # Script de démarrage pour Render
 # Ce script est appelé automatiquement par Render
 
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     print(f"🎉 Démarrage du serveur principal sur le port {port}")
     
     uvicorn.run(app, host="0.0.0.0", port=port)
-"""
+'''
     
     # Créer le fichier dans le répertoire racine (où Render le cherche)
     with open('startup.py', 'w') as f:
