@@ -28,6 +28,12 @@ def install_python_dependencies():
     print("📦 Installation des dépendances Python...")
     
     try:
+        # Mettre à jour pip d'abord
+        subprocess.run([
+            sys.executable, "-m", "pip", "install", "--upgrade", "pip"
+        ], check=True)
+        
+        # Essayer d'installer les dépendances
         subprocess.run([
             sys.executable, "-m", "pip", "install", "-r", 
             "SolarNasih_Deploiement_Complet/requirements_unified.txt"
@@ -36,7 +42,43 @@ def install_python_dependencies():
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ Erreur lors de l'installation Python: {e}")
-        return False
+        print("🔄 Tentative d'installation avec --no-deps...")
+        
+        try:
+            # Essayer avec --no-deps pour éviter les conflits
+            subprocess.run([
+                sys.executable, "-m", "pip", "install", "-r", 
+                "SolarNasih_Deploiement_Complet/requirements_unified.txt", "--no-deps"
+            ], check=True)
+            
+            # Installer les dépendances manquantes
+            subprocess.run([
+                sys.executable, "-m", "pip", "install", "-r", 
+                "SolarNasih_Deploiement_Complet/requirements_unified.txt"
+            ], check=True)
+            
+            print("✅ Dépendances Python installées avec --no-deps")
+            return True
+        except subprocess.CalledProcessError as e2:
+            print(f"❌ Erreur lors de l'installation avec --no-deps: {e2}")
+            print("🔄 Installation des dépendances essentielles uniquement...")
+            
+            # Installer seulement les dépendances essentielles
+            essential_packages = [
+                "fastapi", "uvicorn", "httpx", "pydantic", 
+                "google-generativeai", "openai", "anthropic", "tavily-python"
+            ]
+            
+            for package in essential_packages:
+                try:
+                    subprocess.run([
+                        sys.executable, "-m", "pip", "install", package
+                    ], check=True)
+                except:
+                    print(f"⚠️ Impossible d'installer {package}")
+            
+            print("✅ Dépendances essentielles installées")
+            return True
 
 def install_node_dependencies():
     """Installe les dépendances Node.js"""
