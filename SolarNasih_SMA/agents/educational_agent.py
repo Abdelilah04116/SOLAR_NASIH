@@ -147,7 +147,7 @@ class EducationalAgent(BaseAgent):
             
             # Récupérer les questions de la banque si le topic existe
             if selected_topic in available_topics:
-                topic_questions = question_bank[selected_topic].get(difficulty, question_bank[selected_topic].get("beginner", []))
+            topic_questions = question_bank[selected_topic].get(difficulty, question_bank[selected_topic].get("beginner", []))
             else:
                 # Si le topic n'existe pas, utiliser les questions de "basics" mais avec le vrai topic
                 topic_questions = question_bank["basics"].get(difficulty, question_bank["basics"].get("beginner", []))

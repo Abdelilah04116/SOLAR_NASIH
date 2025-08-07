@@ -1,0 +1,23 @@
+# Commandes de déploiement Render - Solar Nasih SMA
+# Copiez ces commandes dans la configuration Render
+
+# BUILD COMMAND (à copier dans Render) :
+pip install fastapi==0.104.1 uvicorn==0.24.0 pydantic==2.5.0 pydantic-settings==2.1.0 google-generativeai==0.3.2 tavily-python==0.3.0 langgraph==0.0.26 langchain==0.1.0 python-dotenv==1.0.0 requests==2.31.0
+
+# START COMMAND (à copier dans Render) :
+uvicorn main:app --host 0.0.0.0 --port $PORT
+
+# VARIABLES D'ENVIRONNEMENT (à ajouter dans Render) :
+# PYTHON_VERSION=3.11.0
+# GEMINI_API_KEY=votre_clé_gemini
+# TAVILY_API_KEY=votre_clé_tavily
+# ENVIRONMENT=production
+
+# INSTRUCTIONS :
+# 1. Allez sur render.com
+# 2. Créez un nouveau Web Service
+# 3. Connectez votre repo GitHub
+# 4. Copiez le BUILD COMMAND ci-dessus
+# 5. Copiez le START COMMAND ci-dessus
+# 6. Ajoutez les variables d'environnement
+# 7. Déployez ! 
