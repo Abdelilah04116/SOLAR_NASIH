@@ -2,37 +2,36 @@
 # Dépendances minimales pour déploiement rapide
 
 # Web Framework
-fastapi==0.104.1
-uvicorn==0.24.0
-python-multipart==0.0.6
-httpx==0.25.0
+fastapi
+uvicorn
+python-multipart
+httpx
 
 # Data Validation
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic
+pydantic-settings
 
-# LangChain et AI (versions stables)
-langchain==0.0.350
-langgraph==0.0.26
-langchain-google-genai==0.0.6
-langsmith==0.0.77
+# LangChain et AI (versions automatiques)
+langchain
+langgraph
+langchain-google-genai
 
 # APIs externes
-google-generativeai==0.3.2
-tavily-python==0.3.0
+google-generativeai
+tavily-python
 
 # Utilitaires essentiels
-python-dotenv==1.0.0
-requests==2.31.0
+python-dotenv
+requests
 
 # Audio (optionnel)
-speechrecognition==3.10.0
-gtts==2.4.0
+speechrecognition
+gtts
 
 # Documents (optionnel)
-python-docx==1.1.0
-openpyxl==3.1.2
-fpdf2==2.7.6
+python-docx
+openpyxl
+fpdf2
 
 # Streamlit (pour l'interface)
-streamlit==1.28.0 
+streamlit 
