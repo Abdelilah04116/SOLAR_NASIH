@@ -34,6 +34,11 @@ async def root():
     # Redirection immédiate vers le frontend
     return RedirectResponse(url="/frontend/", status_code=302)
 
+@app.get("/frontend")
+async def frontend_root():
+    """Route racine du frontend"""
+    return await frontend_proxy(Request(scope={"type": "http", "method": "GET"}), "")
+
 @app.get("/admin")
 async def admin_panel():
     """Page d'administration avec statut des services"""
@@ -207,19 +212,45 @@ async def frontend_proxy(request: Request, path: str = ""):
     """Proxy pour Frontend"""
     try:
         async with httpx.AsyncClient() as client:
+            # Construire l'URL complète
             url = f"http://localhost:{FRONTEND_PORT}/{path}"
             if request.query_params:
                 url += "?" + str(request.query_params)
             
-            response = await client.get(url, timeout=5.0)
+            # Faire la requête
+            if request.method == "GET":
+                response = await client.get(url, timeout=10.0)
+            elif request.method == "POST":
+                response = await client.post(url, json=await request.json(), timeout=10.0)
+            else:
+                response = await client.request(request.method, url, timeout=10.0)
             
-            # Retourner directement le contenu de la réponse
+            # Retourner la réponse avec le bon type de contenu
             content = await response.aread()
-            return HTMLResponse(
-                content=content,
-                status_code=response.status_code,
-                headers=dict(response.headers)
-            )
+            
+            # Déterminer le type de contenu
+            content_type = response.headers.get("content-type", "text/html")
+            
+            if "text/html" in content_type:
+                return HTMLResponse(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+            elif "application/json" in content_type:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+            else:
+                from fastapi.responses import Response
+                return Response(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
     except Exception as e:
         # Si le frontend n'est pas disponible, afficher une page d'erreur avec redirection
         return HTMLResponse("""
@@ -287,6 +318,50 @@ async def frontend_proxy(request: Request, path: str = ""):
         </body>
         </html>
         """)
+
+@app.get("/{path:path}")
+async def catch_all(request: Request, path: str = ""):
+    """Route catch-all pour les fichiers statiques et routes du frontend"""
+    # Ignorer les routes des APIs
+    if path.startswith(("sma/", "rag/", "admin")):
+        return {"error": "Route not found"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Essayer d'abord le frontend
+            url = f"http://localhost:{FRONTEND_PORT}/{path}"
+            if request.query_params:
+                url += "?" + str(request.query_params)
+            
+            response = await client.get(url, timeout=5.0)
+            content = await response.aread()
+            
+            # Déterminer le type de contenu
+            content_type = response.headers.get("content-type", "text/html")
+            
+            if "text/html" in content_type:
+                return HTMLResponse(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+            elif "application/json" in content_type:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+            else:
+                from fastapi.responses import Response
+                return Response(
+                    content=content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers)
+                )
+    except Exception as e:
+        # Si le frontend n'est pas disponible, rediriger vers la page de chargement
+        return RedirectResponse(url="/frontend/", status_code=302)
 
 def start_sma_service():
     """Démarre le service SMA"""
