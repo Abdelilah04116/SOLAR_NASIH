@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: solar-nasih-api
+    env: python
+    buildCommand: pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain python-dotenv requests
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /health
+    autoDeploy: true
+    plan: free 
