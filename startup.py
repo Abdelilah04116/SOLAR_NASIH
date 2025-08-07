@@ -99,10 +99,46 @@ if __name__ == "__main__":
     time.sleep(10)  # Attendre plus longtemps pour que tous les services soient prêts
     
     # Importer et démarrer le serveur principal
-    from render_main import app
-    import uvicorn
-    
-    port = int(os.getenv('PORT', '10000'))
-    print(f"🎉 Démarrage du serveur principal sur le port {port}")
-    
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    try:
+        from SolarNasih_Deploiement_Complet.render_main import app
+        import uvicorn
+        
+        port = int(os.getenv('PORT', '10000'))
+        print(f"🎉 Démarrage du serveur principal sur le port {port}")
+        
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except ImportError as e:
+        print(f"❌ Erreur d'import: {e}")
+        print("🔄 Tentative d'import direct...")
+        
+        # Essayer d'importer directement
+        import sys
+        sys.path.insert(0, 'SolarNasih_Deploiement_Complet')
+        
+        try:
+            from render_main import app
+            import uvicorn
+            
+            port = int(os.getenv('PORT', '10000'))
+            print(f"🎉 Démarrage du serveur principal sur le port {port}")
+            
+            uvicorn.run(app, host="0.0.0.0", port=port)
+        except ImportError as e2:
+            print(f"❌ Erreur d'import direct: {e2}")
+            print("🔄 Création d'un serveur simple...")
+            
+            # Créer un serveur simple en cas d'échec
+            from fastapi import FastAPI
+            from fastapi.responses import RedirectResponse
+            import uvicorn
+            
+            app = FastAPI()
+            
+            @app.get("/")
+            async def root():
+                return RedirectResponse(url="http://localhost:3000", status_code=302)
+            
+            port = int(os.getenv('PORT', '10000'))
+            print(f"🎉 Démarrage du serveur simple sur le port {port}")
+            
+            uvicorn.run(app, host="0.0.0.0", port=port)
