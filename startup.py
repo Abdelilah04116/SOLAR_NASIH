@@ -35,19 +35,36 @@ def start_background_services():
             os.chdir('SolarNasih_Template')
             if not os.path.exists('node_modules'):
                 subprocess.run(['npm', 'install'], check=True)
+            
             # Essayer d'abord le serveur de développement
             try:
+                print("🔄 Tentative de démarrage en mode développement...")
                 subprocess.Popen(['npm', 'run', 'dev', '--', '--host', '0.0.0.0', '--port', '3000'])
                 print("✅ Frontend démarré en mode développement")
-            except:
+            except Exception as e1:
+                print(f"⚠️ Mode dev échoué: {e1}")
                 # Si dev ne fonctionne pas, essayer preview
                 try:
+                    print("🔄 Tentative de démarrage en mode preview...")
                     subprocess.Popen(['npm', 'run', 'preview', '--', '--host', '0.0.0.0', '--port', '3000'])
                     print("✅ Frontend démarré en mode preview")
-                except:
+                except Exception as e2:
+                    print(f"⚠️ Mode preview échoué: {e2}")
                     # Si preview ne fonctionne pas, essayer le serveur de build
-                    subprocess.Popen(['npx', 'serve', 'dist', '-s', '-l', '3000'])
-                    print("✅ Frontend démarré avec serve")
+                    try:
+                        print("🔄 Tentative de démarrage avec serve...")
+                        subprocess.Popen(['npx', 'serve', 'dist', '-s', '-l', '3000'])
+                        print("✅ Frontend démarré avec serve")
+                    except Exception as e3:
+                        print(f"⚠️ Serve échoué: {e3}")
+                        # Dernière tentative avec un serveur simple
+                        try:
+                            print("🔄 Tentative avec serveur Python simple...")
+                            subprocess.Popen([sys.executable, '-m', 'http.server', '3000'])
+                            print("✅ Frontend démarré avec serveur Python")
+                        except Exception as e4:
+                            print(f"❌ Toutes les tentatives ont échoué: {e4}")
+            
             os.chdir('..')
         except Exception as e:
             print(f"⚠️ Erreur lors du démarrage du frontend: {e}")

@@ -31,80 +31,8 @@ app = FastAPI(title="SolarNasih Unified", version="1.0.0")
 @app.get("/")
 async def root():
     """Redirection automatique vers le frontend principal"""
-    try:
-        # Essayer de rediriger vers le frontend
-        frontend_url = f"http://localhost:{FRONTEND_PORT}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(frontend_url, timeout=2.0)
-            if response.status_code == 200:
-                return RedirectResponse(url=f"/frontend/", status_code=302)
-    except:
-        pass
-    
-    # Si le frontend n'est pas disponible, afficher une page de chargement
-    return HTMLResponse("""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>SolarNasih - Chargement...</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                margin: 0; 
-                padding: 0;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .loading-container {
-                text-align: center;
-                background: rgba(255, 255, 255, 0.1);
-                padding: 40px;
-                border-radius: 15px;
-                backdrop-filter: blur(10px);
-            }
-            .spinner {
-                border: 4px solid rgba(255, 255, 255, 0.3);
-                border-top: 4px solid #fff;
-                border-radius: 50%;
-                width: 50px;
-                height: 50px;
-                animation: spin 1s linear infinite;
-                margin: 20px auto;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            h1 {
-                margin-bottom: 20px;
-                font-size: 2em;
-            }
-            .redirect-text {
-                margin-top: 20px;
-                font-size: 1.1em;
-            }
-        </style>
-        <script>
-            // Redirection automatique vers le frontend
-            setTimeout(function() {
-                window.location.href = '/frontend/';
-            }, 2000);
-        </script>
-    </head>
-    <body>
-        <div class="loading-container">
-            <h1>🚀 SolarNasih</h1>
-            <div class="spinner"></div>
-            <p>Chargement de l'application...</p>
-            <p class="redirect-text">Redirection automatique dans 2 secondes...</p>
-        </div>
-    </body>
-    </html>
-    """)
+    # Redirection immédiate vers le frontend
+    return RedirectResponse(url="/frontend/", status_code=302)
 
 @app.get("/admin")
 async def admin_panel():
@@ -268,27 +196,72 @@ async def frontend_proxy(request: Request, path: str = ""):
             if request.query_params:
                 url += "?" + str(request.query_params)
             
-            response = await client.get(url)
+            response = await client.get(url, timeout=5.0)
             return response
     except Exception as e:
+        # Si le frontend n'est pas disponible, afficher une page d'erreur avec redirection
         return HTMLResponse("""
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Frontend Non Disponible</title>
+            <title>SolarNasih - Chargement...</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
-                .error { color: #d32f2f; background: #ffebee; padding: 20px; border-radius: 5px; }
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .loading-container {
+                    text-align: center;
+                    background: rgba(255, 255, 255, 0.1);
+                    padding: 40px;
+                    border-radius: 15px;
+                    backdrop-filter: blur(10px);
+                }
+                .spinner {
+                    border: 4px solid rgba(255, 255, 255, 0.3);
+                    border-top: 4px solid #fff;
+                    border-radius: 50%;
+                    width: 50px;
+                    height: 50px;
+                    animation: spin 1s linear infinite;
+                    margin: 20px auto;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                h1 {
+                    margin-bottom: 20px;
+                    font-size: 2em;
+                }
+                .error-text {
+                    margin-top: 20px;
+                    font-size: 1em;
+                    color: #ffeb3b;
+                }
             </style>
+            <script>
+                // Essayer de recharger la page toutes les 3 secondes
+                setTimeout(function() {
+                    window.location.reload();
+                }, 3000);
+            </script>
         </head>
         <body>
-            <h1>⚠️ Frontend Non Disponible</h1>
-            <div class="error">
-                <p>Le frontend React n'est pas disponible pour le moment.</p>
-                <p>Erreur: """ + str(e) + """</p>
-                <p>Vous pouvez toujours utiliser les APIs SMA et RAG directement.</p>
+            <div class="loading-container">
+                <h1>🚀 SolarNasih</h1>
+                <div class="spinner"></div>
+                <p>Chargement de l'application...</p>
+                <p class="error-text">Le frontend se charge, veuillez patienter...</p>
+                <p>Rechargement automatique dans 3 secondes...</p>
             </div>
-            <p><a href="/">← Retour à l'accueil</a></p>
         </body>
         </html>
         """)
