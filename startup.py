@@ -72,18 +72,24 @@ def start_background_services():
             os.chdir('..')
     
     # Démarrer les services en parallèle
+    print("🚀 Démarrage de SMA...")
     threading.Thread(target=start_sma, daemon=True).start()
-    time.sleep(2)
+    time.sleep(3)
+    
+    print("🚀 Démarrage de RAG...")
     threading.Thread(target=start_rag, daemon=True).start()
-    time.sleep(2)
+    time.sleep(3)
+    
+    print("🚀 Démarrage du Frontend...")
     threading.Thread(target=start_frontend, daemon=True).start()
+    time.sleep(5)  # Attendre plus longtemps pour le frontend
 
 if __name__ == "__main__":
     # Démarrer les services en arrière-plan
     start_background_services()
     
     # Attendre un peu que les services démarrent
-    time.sleep(5)
+    time.sleep(10)  # Attendre plus longtemps pour que tous les services soient prêts
     
     # Importer et démarrer le serveur principal
     from render_main import app

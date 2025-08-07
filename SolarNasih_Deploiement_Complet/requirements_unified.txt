@@ -13,6 +13,7 @@ pydantic-settings==2.1.0
 
 # ===== AI & LANGUAGE MODELS =====
 langchain==0.0.350
+langgraph==0.0.20
 sentence-transformers==2.2.2
 transformers==4.36.0
 google-generativeai==0.3.2

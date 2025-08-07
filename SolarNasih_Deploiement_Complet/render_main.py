@@ -148,6 +148,7 @@ async def admin_panel():
     """)
 
 @app.get("/sma/{path:path}")
+@app.post("/sma/{path:path}")
 async def sma_proxy(request: Request, path: str = ""):
     """Proxy pour SMA API"""
     try:
@@ -163,11 +164,18 @@ async def sma_proxy(request: Request, path: str = ""):
             else:
                 response = await client.request(request.method, url)
             
-            return response
+            # Retourner directement le contenu de la réponse
+            content = await response.aread()
+            return HTMLResponse(
+                content=content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
     except Exception as e:
         return {"error": f"SMA service not available: {str(e)}"}
 
 @app.get("/rag/{path:path}")
+@app.post("/rag/{path:path}")
 async def rag_proxy(request: Request, path: str = ""):
     """Proxy pour RAG API"""
     try:
@@ -183,11 +191,18 @@ async def rag_proxy(request: Request, path: str = ""):
             else:
                 response = await client.request(request.method, url)
             
-            return response
+            # Retourner directement le contenu de la réponse
+            content = await response.aread()
+            return HTMLResponse(
+                content=content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
     except Exception as e:
         return {"error": f"RAG service not available: {str(e)}"}
 
 @app.get("/frontend/{path:path}")
+@app.post("/frontend/{path:path}")
 async def frontend_proxy(request: Request, path: str = ""):
     """Proxy pour Frontend"""
     try:
@@ -197,7 +212,14 @@ async def frontend_proxy(request: Request, path: str = ""):
                 url += "?" + str(request.query_params)
             
             response = await client.get(url, timeout=5.0)
-            return response
+            
+            # Retourner directement le contenu de la réponse
+            content = await response.aread()
+            return HTMLResponse(
+                content=content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
     except Exception as e:
         # Si le frontend n'est pas disponible, afficher une page d'erreur avec redirection
         return HTMLResponse("""
