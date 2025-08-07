@@ -20,7 +20,7 @@ def print_instructions():
     print("4. Configurez comme suit :")
     print()
     print("🔧 BUILD COMMAND :")
-    print("pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain python-dotenv requests")
+    print("pip install fastapi uvicorn pydantic google-generativeai tavily-python langgraph langchain langchain-google-genai python-dotenv requests")
     print()
     print("🚀 START COMMAND :")
     print("cd SolarNasih_SMA && uvicorn main:app --host 0.0.0.0 --port $PORT")
@@ -48,6 +48,7 @@ google-generativeai
 tavily-python
 langgraph
 langchain
+langchain-google-genai
 python-dotenv
 requests
 """

@@ -12,6 +12,7 @@ tavily-python
 # LangChain (versions compatibles)
 langchain
 langgraph
+langchain-google-genai
 
 # Utilitaires
 python-dotenv
