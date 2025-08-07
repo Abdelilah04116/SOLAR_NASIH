@@ -20,4 +20,13 @@ tavily-python
 
 # Utilitaires (essentiel)
 python-dotenv
-requests 
+requests
+
+# Audio (pour VoiceService)
+speechrecognition
+gtts
+
+# Documents (pour DocumentGenerator)
+python-docx
+openpyxl
+fpdf2 
