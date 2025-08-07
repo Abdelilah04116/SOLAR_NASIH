@@ -20,6 +20,11 @@ from config.settings import settings
 from agents.multilingual_detector import MultilingualDetectorAgent
 from httpx import AsyncClient
 
+# Création des dossiers nécessaires AVANT la configuration du logging
+os.makedirs('logs', exist_ok=True)
+os.makedirs('static/audio', exist_ok=True)
+os.makedirs('static/documents', exist_ok=True)
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -30,11 +35,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Création du dossier logs s'il n'existe pas
-os.makedirs('logs', exist_ok=True)
-os.makedirs('static/audio', exist_ok=True)
-os.makedirs('static/documents', exist_ok=True)
 
 # Initialisation de l'application
 app = FastAPI(
