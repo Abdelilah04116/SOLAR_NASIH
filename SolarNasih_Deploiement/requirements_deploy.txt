@@ -8,9 +8,13 @@ httpx==0.25.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# APIs externes (directement)
+# APIs externes
 google-generativeai==0.3.2
 tavily-python==0.3.0
+
+# LangChain et LangGraph
+langgraph==0.0.26
+langchain==0.1.0
 
 # Utilitaires
 python-dotenv==1.0.0
@@ -32,4 +36,4 @@ markdown==3.5.1
 beautifulsoup4==4.12.2
 
 # Streamlit (pour l'interface)
-streamlit==1.28.0
+streamlit==1.28.0 
