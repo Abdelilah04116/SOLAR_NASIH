@@ -114,11 +114,13 @@ import subprocess
 # Ajouter le répertoire de déploiement au path
 sys.path.append('SolarNasih_Deploiement_Complet')
 
-# Importer et exécuter le démarrage unifié
-from start_all_unified import main
+# Importer et exécuter le serveur principal
+from render_main import app
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    port = int(os.getenv('PORT', '10000'))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 """
     
     with open('startup.py', 'w') as f:

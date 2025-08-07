@@ -16,6 +16,8 @@ class UnifiedServiceManager:
     def __init__(self):
         self.processes = []
         self.running = True
+        # Utiliser le port de Render pour le service principal
+        self.port_main = os.getenv('PORT', '10000')
         self.port_sma = os.getenv('SMA_PORT', '8000')
         self.port_rag = os.getenv('RAG_PORT', '8001')
         self.port_frontend = os.getenv('FRONTEND_PORT', '3000')
@@ -32,6 +34,109 @@ class UnifiedServiceManager:
         
         print("✅ Tous les composants trouvés")
         return True
+    
+    def start_main_service(self):
+        """Démarre le service principal sur le port de Render"""
+        print(f"🚀 Démarrage du service principal sur le port {self.port_main}...")
+        
+        try:
+            # Créer un serveur simple qui redirige vers les autres services
+            from fastapi import FastAPI, Request
+            from fastapi.responses import RedirectResponse, HTMLResponse
+            import uvicorn
+            
+            app = FastAPI(title="SolarNasih Unified", version="1.0.0")
+            
+            @app.get("/")
+            async def root():
+                return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>SolarNasih - Services Unifiés</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 40px; }
+                        .service { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+                        .service h3 { margin: 0 0 10px 0; color: #333; }
+                        .service a { color: #007bff; text-decoration: none; }
+                        .service a:hover { text-decoration: underline; }
+                    </style>
+                </head>
+                <body>
+                    <h1>🚀 SolarNasih - Services Unifiés</h1>
+                    <p>Bienvenue ! Voici les services disponibles :</p>
+                    
+                    <div class="service">
+                        <h3>🌐 Frontend (Interface principale)</h3>
+                        <p><a href="/frontend" target="_blank">Accéder au Frontend</a></p>
+                    </div>
+                    
+                    <div class="service">
+                        <h3>🚀 SMA API (Solar Management Assistant)</h3>
+                        <p><a href="/sma/docs" target="_blank">Documentation SMA API</a></p>
+                        <p><a href="/sma" target="_blank">Accéder à SMA API</a></p>
+                    </div>
+                    
+                    <div class="service">
+                        <h3>🤖 RAG API (Retrieval-Augmented Generation)</h3>
+                        <p><a href="/rag/docs" target="_blank">Documentation RAG API</a></p>
+                        <p><a href="/rag" target="_blank">Accéder à RAG API</a></p>
+                    </div>
+                    
+                    <div class="service">
+                        <h3>📊 Statut des Services</h3>
+                        <p>✅ Tous les services sont opérationnels</p>
+                    </div>
+                </body>
+                </html>
+                """)
+            
+            @app.get("/sma/{path:path}")
+            async def sma_proxy(request: Request, path: str = ""):
+                """Proxy pour SMA API"""
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    try:
+                        response = await client.get(f"http://localhost:{self.port_sma}/{path}")
+                        return response
+                    except:
+                        return {"error": "SMA service not available"}
+            
+            @app.get("/rag/{path:path}")
+            async def rag_proxy(request: Request, path: str = ""):
+                """Proxy pour RAG API"""
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    try:
+                        response = await client.get(f"http://localhost:{self.port_rag}/{path}")
+                        return response
+                    except:
+                        return {"error": "RAG service not available"}
+            
+            @app.get("/frontend/{path:path}")
+            async def frontend_proxy(request: Request, path: str = ""):
+                """Proxy pour Frontend"""
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    try:
+                        response = await client.get(f"http://localhost:{self.port_frontend}/{path}")
+                        return response
+                    except:
+                        return {"error": "Frontend service not available"}
+            
+            # Démarrer le serveur principal
+            process = subprocess.Popen([
+                sys.executable, "-m", "uvicorn", "start_all_unified:app", 
+                "--host", "0.0.0.0", "--port", self.port_main
+            ])
+            
+            self.processes.append(("Main", process))
+            print(f"✅ Service principal démarré sur http://0.0.0.0:{self.port_main}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Erreur lors du démarrage du service principal: {e}")
+            return False
     
     def start_sma_service(self):
         """Démarre le service SMA"""
@@ -122,7 +227,7 @@ class UnifiedServiceManager:
         if not self.check_prerequisites():
             return False
         
-        # Démarrer les services en parallèle
+        # Démarrer les services en arrière-plan d'abord
         services = [
             self.start_sma_service,
             self.start_rag_service,
@@ -136,6 +241,13 @@ class UnifiedServiceManager:
             thread.start()
             threads.append(thread)
             time.sleep(2)  # Délai entre les démarrages
+        
+        # Attendre un peu que les services démarrent
+        time.sleep(5)
+        
+        # Démarrer le service principal en dernier
+        if not self.start_main_service():
+            return False
         
         # Attendre que tous les threads se terminent
         for thread in threads:
@@ -183,13 +295,15 @@ def main():
         print("============================================================")
         print("")
         print("📊 Services disponibles:")
+        print(f"   • Service Principal: http://0.0.0.0:{manager.port_main}")
         print(f"   • SMA API: http://0.0.0.0:{manager.port_sma}")
         print(f"   • RAG API: http://0.0.0.0:{manager.port_rag}")
         print(f"   • Frontend: http://0.0.0.0:{manager.port_frontend}")
         print("")
         print("📚 Documentation:")
-        print(f"   • SMA API Docs: http://0.0.0.0:{manager.port_sma}/docs")
-        print(f"   • RAG API Docs: http://0.0.0.0:{manager.port_rag}/docs")
+        print(f"   • Interface principale: http://0.0.0.0:{manager.port_main}")
+        print(f"   • SMA API Docs: http://0.0.0.0:{manager.port_main}/sma/docs")
+        print(f"   • RAG API Docs: http://0.0.0.0:{manager.port_main}/rag/docs")
         print("")
         print("🛑 Appuyez sur Ctrl+C pour arrêter tous les services")
         print("============================================================")
