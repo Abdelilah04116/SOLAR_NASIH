@@ -217,8 +217,8 @@ class TaskDividerAgent(BaseAgent):
             self.current_user_question = state.current_message
             
             # 1. Détecter les agents pertinents
-        detected_agents = self._detect_relevant_agents(state.current_message)
-        
+            detected_agents = self._detect_relevant_agents(state.current_message)
+            
             if not detected_agents:
                 logger.warning("Aucun agent détecté, utilisation du RAG par défaut")
                 detected_agents = [AgentType.RAG_SYSTEM]
@@ -227,19 +227,19 @@ class TaskDividerAgent(BaseAgent):
             rag_result = await self._check_rag_first(state.current_message)
             
             # 3. Obtenir les réponses des agents
-        agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
-        
+            agent_responses = await self._get_agent_responses(state, detected_agents, agents_map)
+            
             # 4. Construire la réponse finale
-        final_response = await self._build_final_response(agent_responses, detected_agents)
-        
+            final_response = await self._build_final_response(agent_responses, detected_agents)
+            
             # 5. Calculer la confiance globale
             overall_confidence = self._calculate_overall_confidence(agent_responses)
             
             # 6. Collecter les sources
             sources = self._collect_sources(agent_responses)
         
-        return {
-            "response": final_response,
+            return {
+                "response": final_response,
                 "agent_used": "task_divider",
                 "confidence": overall_confidence,
                 "sources": sources,
@@ -256,7 +256,7 @@ class TaskDividerAgent(BaseAgent):
                 "confidence": 0.0,
                 "error": str(e),
                 "sources": []
-        }
+            }
     
     def _detect_relevant_agents(self, message: str) -> List[AgentType]:
         """Détecte les agents pertinents pour la requête avec stratégie RAG-first"""
