@@ -1,0 +1,38 @@
+# ===== requirements_minimal.txt - Solar Nasih SMA =====
+# Dépendances minimales pour déploiement rapide
+
+# Web Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+httpx==0.25.0
+
+# Data Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# LangChain et AI (versions stables)
+langchain==0.0.350
+langgraph==0.0.26
+langchain-google-genai==0.0.6
+langsmith==0.0.77
+
+# APIs externes
+google-generativeai==0.3.2
+tavily-python==0.3.0
+
+# Utilitaires essentiels
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Audio (optionnel)
+speechrecognition==3.10.0
+gtts==2.4.0
+
+# Documents (optionnel)
+python-docx==1.1.0
+openpyxl==3.1.2
+fpdf2==2.7.6
+
+# Streamlit (pour l'interface)
+streamlit==1.28.0 
