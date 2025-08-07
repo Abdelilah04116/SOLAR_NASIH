@@ -39,6 +39,11 @@ async def frontend_root():
     """Route racine du frontend"""
     return await frontend_proxy(Request(scope={"type": "http", "method": "GET"}), "")
 
+@app.get("/frontend/")
+async def frontend_root_slash():
+    """Route racine du frontend avec slash"""
+    return await frontend_proxy(Request(scope={"type": "http", "method": "GET"}), "")
+
 @app.get("/admin")
 async def admin_panel():
     """Page d'administration avec statut des services"""
@@ -217,40 +222,24 @@ async def frontend_proxy(request: Request, path: str = ""):
             if request.query_params:
                 url += "?" + str(request.query_params)
             
-            # Faire la requête
+            # Faire la requête avec un timeout plus long
             if request.method == "GET":
-                response = await client.get(url, timeout=10.0)
+                response = await client.get(url, timeout=20.0)
             elif request.method == "POST":
-                response = await client.post(url, json=await request.json(), timeout=10.0)
+                response = await client.post(url, json=await request.json(), timeout=20.0)
             else:
-                response = await client.request(request.method, url, timeout=10.0)
+                response = await client.request(request.method, url, timeout=20.0)
             
-            # Retourner la réponse avec le bon type de contenu
+            # Retourner la réponse directement
             content = await response.aread()
             
-            # Déterminer le type de contenu
-            content_type = response.headers.get("content-type", "text/html")
-            
-            if "text/html" in content_type:
-                return HTMLResponse(
-                    content=content,
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
-            elif "application/json" in content_type:
-                from fastapi.responses import JSONResponse
-                return JSONResponse(
-                    content=content,
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
-            else:
-                from fastapi.responses import Response
-                return Response(
-                    content=content,
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
+            # Créer une réponse avec les bons headers
+            from fastapi.responses import Response
+            return Response(
+                content=content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
     except Exception as e:
         # Si le frontend n'est pas disponible, afficher une page d'erreur avec redirection
         return HTMLResponse("""
@@ -323,7 +312,7 @@ async def frontend_proxy(request: Request, path: str = ""):
 async def catch_all(request: Request, path: str = ""):
     """Route catch-all pour les fichiers statiques et routes du frontend"""
     # Ignorer les routes des APIs
-    if path.startswith(("sma/", "rag/", "admin")):
+    if path.startswith(("sma/", "rag/", "admin", "frontend")):
         return {"error": "Route not found"}
     
     try:
@@ -333,7 +322,7 @@ async def catch_all(request: Request, path: str = ""):
             if request.query_params:
                 url += "?" + str(request.query_params)
             
-            response = await client.get(url, timeout=5.0)
+            response = await client.get(url, timeout=10.0)
             content = await response.aread()
             
             # Déterminer le type de contenu
@@ -360,8 +349,52 @@ async def catch_all(request: Request, path: str = ""):
                     headers=dict(response.headers)
                 )
     except Exception as e:
-        # Si le frontend n'est pas disponible, rediriger vers la page de chargement
-        return RedirectResponse(url="/frontend/", status_code=302)
+        # Si le frontend n'est pas disponible, afficher une page d'erreur
+        return HTMLResponse("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>SolarNasih - Erreur</title>
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .error-container {
+                    text-align: center;
+                    background: rgba(255, 255, 255, 0.1);
+                    padding: 40px;
+                    border-radius: 15px;
+                    backdrop-filter: blur(10px);
+                }
+                h1 {
+                    margin-bottom: 20px;
+                    font-size: 2em;
+                }
+                .error-text {
+                    margin-top: 20px;
+                    font-size: 1em;
+                    color: #ffeb3b;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="error-container">
+                <h1>🚀 SolarNasih</h1>
+                <p>Erreur de chargement</p>
+                <p class="error-text">Le frontend n'est pas disponible</p>
+                <p>Veuillez réessayer dans quelques instants</p>
+            </div>
+        </body>
+        </html>
+        """)
 
 def start_sma_service():
     """Démarre le service SMA"""
