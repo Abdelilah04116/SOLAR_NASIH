@@ -1,0 +1,57 @@
+services:
+  # Service RAG (Retrieval-Augmented Generation)
+  - type: web
+    name: solar-nasih-rag
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api_simple:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # API Keys (à configurer dans Render)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      
+      # Configuration de l'environnement
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: ENVIRONMENT
+        value: production
+      
+      # Configuration des services externes (optionnel)
+      - key: REDIS_URL
+        value: redis://localhost:6379
+      - key: QDRANT_URL
+        value: http://localhost:6333
+      
+      # Configuration CORS pour le frontend
+      - key: CORS_ORIGINS
+        value: "https://solar-nasih-frontend.vercel.app,http://localhost:3000,http://localhost:5173"
+    
+    # Configuration de l'auto-scaling
+    autoDeploy: true
+    healthCheckPath: /health
+    
+    # Configuration des ressources
+    plan: starter  # ou free pour commencer
+
+  # Service Redis (optionnel - pour le cache)
+  - type: redis
+    name: solar-nasih-redis-rag
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # Service Qdrant (optionnel - pour la base vectorielle)
+  - type: web
+    name: solar-nasih-qdrant-rag
+    env: docker
+    dockerfilePath: ../Dockerfile.qdrant
+    envVars:
+      - key: QDRANT__SERVICE__HTTP_PORT
+        value: 6333
+      - key: QDRANT__SERVICE__GRPC_PORT
+        value: 6334
