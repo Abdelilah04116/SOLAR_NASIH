@@ -1,7 +1,8 @@
 import { ChatMessageType, ModalList, useSettings } from "../store/store";
+import { API_CONFIG, buildApiUrl } from "../config/apiConfig";
 
-const apiUrl = "http://0.0.0.0:8000";
-const IMAGE_GENERATION_API_URL = "http://0.0.0.0:8000";
+const apiUrl = API_CONFIG.SMA_API_URL;
+const IMAGE_GENERATION_API_URL = API_CONFIG.SMA_API_URL;
 
 export async function fetchResults(
   messages: Omit<ChatMessageType, "id" | "type">[],
@@ -129,7 +130,7 @@ export async function generateImage(
 
 // Envoie une question à l'API SMA
 export async function askSMA(question: string, context: any = {}) {
-  const response = await fetch("http://localhost:8000/chat", {
+  const response = await fetch(buildApiUrl('SMA', API_CONFIG.ENDPOINTS.SMA.CHAT), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -149,7 +150,7 @@ export async function uploadDocument(file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch("http://localhost:8000/upload-document", {
+  const response = await fetch(buildApiUrl('SMA', API_CONFIG.ENDPOINTS.SMA.UPLOAD_DOCUMENT), {
     method: "POST",
     body: formData,
   });
@@ -162,7 +163,7 @@ export async function uploadDocument(file: File) {
 
 // Simulation énergétique via l'API SMA
 export async function simulateEnergy(simulationParams: any) {
-  const response = await fetch("http://localhost:8000/simulate-energy", {
+  const response = await fetch(buildApiUrl('SMA', API_CONFIG.ENDPOINTS.SMA.SIMULATE_ENERGY), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(simulationParams),
@@ -176,7 +177,7 @@ export async function simulateEnergy(simulationParams: any) {
 
 // Liste les documents indexés via l'API SMA
 export async function listDocuments() {
-  const response = await fetch("http://localhost:8000/documents", {
+  const response = await fetch(buildApiUrl('SMA', API_CONFIG.ENDPOINTS.SMA.DOCUMENTS), {
     method: "GET",
   });
   if (!response.ok) {
@@ -188,7 +189,7 @@ export async function listDocuments() {
 
 // Supprime un document via l'API SMA
 export async function deleteDocument(documentId: string) {
-  const response = await fetch(`http://localhost:8000/documents/${documentId}`, {
+  const response = await fetch(`${buildApiUrl('SMA', API_CONFIG.ENDPOINTS.SMA.DOCUMENTS)}/${documentId}`, {
     method: "DELETE",
   });
   if (!response.ok) {

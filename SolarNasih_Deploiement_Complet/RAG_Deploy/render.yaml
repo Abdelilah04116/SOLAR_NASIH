@@ -3,7 +3,8 @@ services:
   - type: web
     name: solar-nasih-rag
     env: python
-    buildCommand: pip install -r requirements.txt
+    rootDir: SolarNasih_RAG
+    buildCommand: pip install -r ../SolarNasih_Deploiement_Complet/requirements_rag.txt
     startCommand: uvicorn api_simple:app --host 0.0.0.0 --port $PORT
     envVars:
       # API Keys (à configurer dans Render)

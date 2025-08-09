@@ -3,7 +3,8 @@ services:
   - type: web
     name: solar-nasih-sma
     env: python
-    buildCommand: pip install -r requirements.txt
+    rootDir: SolarNasih_SMA
+    buildCommand: pip install -r ../SolarNasih_Deploiement_Complet/requirements_sma.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       # API Keys (à configurer dans Render)

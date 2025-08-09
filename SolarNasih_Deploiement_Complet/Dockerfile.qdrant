@@ -1,5 +1,24 @@
+# Dockerfile pour Qdrant Vector Database
 FROM qdrant/qdrant:latest
 
+# Configuration des variables d'environnement
+ENV QDRANT__SERVICE__HTTP_PORT=6333
+ENV QDRANT__SERVICE__GRPC_PORT=6334
+ENV QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+ENV QDRANT__TELEMETRY_DISABLED=true
+
+# Créer le répertoire de stockage
+RUN mkdir -p /qdrant/storage
+
+# Configuration de santé
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:6333/health || exit 1
+
+# Exposition des ports
 EXPOSE 6333 6334
 
-CMD ["qdrant"]
+# Volumes pour la persistance des données
+VOLUME ["/qdrant/storage"]
+
+# Commande par défaut
+CMD ["./qdrant"]
