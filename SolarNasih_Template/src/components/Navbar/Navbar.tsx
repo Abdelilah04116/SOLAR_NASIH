@@ -85,7 +85,10 @@ export default function Navbar({
             <div className=" self-stretch mr-4 w-full mb-2">
               <select
                 value={selectedModal}
-                onChange={(e) => setModal(e.target.value as ModalList)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value) setModal(value as ModalList);
+                }}
                 className="border border-gray-300    focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
               >
                 {Object.keys(groupedModels).map((group) => (

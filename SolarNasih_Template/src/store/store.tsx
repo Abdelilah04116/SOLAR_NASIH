@@ -6,7 +6,8 @@ import { produce } from "immer";
 import moment from "moment";
 import { ImageSize } from "../services/chatService";
 
-const modalsList = [,
+const modalsList = [
+  "gpt-3.5-turbo"
 ] as const;
 
 export interface ChatMessageType {
