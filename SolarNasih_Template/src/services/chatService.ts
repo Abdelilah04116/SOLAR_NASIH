@@ -18,7 +18,6 @@ export async function fetchResults(
       headers: {
         "content-type": `application/json`,
         accept: `text/event-stream`,
-        Authorization: `Bearer ${localStorage.getItem("apikey")}`,
       },
       body: JSON.stringify({
         model: useSettings.getState().settings.selectedModal,
@@ -65,9 +64,9 @@ export async function fetchResults(
 
 export async function fetchModals() {
   try {
-    const response = await fetch("http://0.0.0.0:8000", {
+    const response = await fetch(API_CONFIG.SMA_API_URL, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("apikey")}`,
+        "Content-Type": "application/json",
       },
     });
     const data = await response.json();
@@ -111,7 +110,6 @@ export async function generateImage(
     headers: {
       "content-type": `application/json`,
       accept: `text/event-stream`,
-      Authorization: `Bearer ${localStorage.getItem("apikey")}`,
     },
     body: JSON.stringify({
       model: selectedModal,

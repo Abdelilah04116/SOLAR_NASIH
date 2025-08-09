@@ -10,7 +10,6 @@ import useChat, { chatsLength, useAuth, useTheme, useMicrophoneAlert } from "./s
 import classNames from "classnames";
 import Chats from "./components/Chat/Chats";
 import Modal from "./components/modals/Modal";
-import Apikey from "./components/modals/Apikey";
 import MicrophoneAlert from "./components/modals/MicrophoneAlert";
 
 setupIonicReact();
@@ -18,7 +17,7 @@ function App() {
   const [active, setActive] = useState(false);
   const isChatsVisible = useChat(chatsLength);
   const addNewChat = useChat((state) => state.addNewChat);
-  const userHasApiKey = useAuth((state) => state.apikey);
+
   const [theme] = useTheme((state) => [state.theme]);
   const { showMicrophoneAlert, setShowMicrophoneAlert } = useMicrophoneAlert();
 
@@ -108,9 +107,7 @@ function App() {
           </div>
         </div>
       </main>
-      <Modal visible={!Boolean(userHasApiKey)}>
-        <Apikey />
-      </Modal>
+
       
       {/* Alerte microphone globale */}
       <MicrophoneAlert 
