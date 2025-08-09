@@ -8,7 +8,7 @@ import {
   ellipsisHorizontalOutline,
   closeOutline,
 } from "ionicons/icons";
-import useChat, { ModalList, useAuth, useSettings } from "../../store/store";
+import useChat, { useAuth, useSettings } from "../../store/store";
 import Settings from "../modals/Settings";
 import Modal from "../modals/Modal";
 
@@ -20,30 +20,12 @@ export default function Navbar({
   setActive: (v: boolean) => void;
 }) {
   const addNewChat = useChat((state) => state.addNewChat);
-  const [
-    isVisible,
-    setModalVisible,
-    selectedModal,
-    modalsList,
-    setModal,
-  ] = useSettings((state) => [
+  const [isVisible, setModalVisible] = useSettings((state) => [
     state.isModalVisible,
     state.setModalVisible,
-    state.settings.selectedModal,
-    state.modalsList,
-    state.setModal,
   ]);
   const name = useAuth((state) => state.user.name);
-  const groupedModels = modalsList.reduce(
-    (obj: Record<string, string[]>, modal) => {
-      const prefix = modal.split("-")[0] + "-" + modal.split("-")[1];
-      return {
-        ...obj,
-        [prefix]: [...(obj[prefix] || []), modal],
-      };
-    },
-    {}
-  );
+
 
   return (
     <>
@@ -82,30 +64,7 @@ export default function Navbar({
             <ChatHistory />
           </div>
           <div className="account  font-bold  z-20 bg-[#202123] border-t border-gray-500 shadow  ">
-            <div className=" self-stretch mr-4 w-full mb-2">
-              <select
-                value={selectedModal}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value) setModal(value as ModalList);
-                }}
-                className="border border-gray-300    focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-              >
-                {Object.keys(groupedModels).map((group) => (
-                  <optgroup
-                    label={group.toUpperCase()}
-                    key={group}
-                    // disabled={group.startsWith("dall-e")}
-                  >
-                    {groupedModels[group].map((modal) => (
-                      <option value={modal} key={modal}>
-                        {modal}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
+
             <div className="[&>.options]:focus-within:visible">
               <button
                 type="button"
