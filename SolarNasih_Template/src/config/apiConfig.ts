@@ -28,10 +28,13 @@ export const API_CONFIG = {
   ENDPOINTS: {
     SMA: {
       CHAT: '/chat',
+      VOICE_CHAT: '/voice-chat',
       UPLOAD_DOCUMENT: '/upload-document',
       SIMULATE_ENERGY: '/simulate-energy',
+      GENERATE_DOCUMENT: '/generate-document',
       DOCUMENTS: '/documents',
       HEALTH: '/health',
+      DOCS: '/docs',
     },
     RAG: {
       UPLOAD_FILE: '/upload/file',
