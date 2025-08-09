@@ -11,13 +11,18 @@ import signal
 from pathlib import Path
 
 def start_api():
-    """Démarre l'API FastAPI"""
-    print("🚀 Démarrage de l'API RAG...")
+    """Démarre l'API FastAPI complète"""
+    print("🚀 Démarrage de l'API RAG complète...")
+    
+    # Configuration du PYTHONPATH pour les imports
+    os.environ["PYTHONPATH"] = str(Path.cwd())
+    
     api_cmd = [
         sys.executable, "-m", "uvicorn", 
-        "api_simple:app", 
+        "src.api.main:app", 
         "--host", "0.0.0.0", 
-        "--port", os.getenv("PORT", "8000")
+        "--port", os.getenv("PORT", "8000"),
+        "--reload", "False"
     ]
     return subprocess.Popen(api_cmd)
 
