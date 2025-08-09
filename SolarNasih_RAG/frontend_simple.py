@@ -12,7 +12,8 @@ st.title("🔍 RAG Multimodal System")
 st.markdown("Recherchez dans vos documents avec l'IA")
 
 # Configuration API
-API_BASE_URL = "http://localhost:8000"
+import os
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # Sidebar
 with st.sidebar:
